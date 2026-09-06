@@ -55,7 +55,13 @@ async def probe_endpoints(
             json=scan_payload,
             ssl=False,
         ) as resp:
-            results["scan"] = await resp.json() if resp.status == 200 else {"status": resp.status}
+            if resp.status == 200:
+                try:
+                    results["scan"] = await resp.json()
+                except Exception:
+                    results["scan"] = {"status": 200, "message": "Scan started successfully"}
+            else:
+                results["scan"] = {"status": resp.status}
     except Exception as err:
         results["scan"] = {"error": str(err)}
 
