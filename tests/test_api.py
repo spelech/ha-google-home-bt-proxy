@@ -45,6 +45,7 @@ async def test_start_scan_and_get_results(aiohttp_client) -> None:
                 },
                 {"mac_address": None, "rssi": -50},  # Missing mac
                 {"mac_address": "12:34:56:78:90:AB", "rssi": None},  # Missing rssi
+                "invalid_non_dict_element",  # Non-dict item
             ]
         )
 
@@ -74,6 +75,31 @@ async def test_start_scan_and_get_results(aiohttp_client) -> None:
     assert devices[0].name == "SmartBand"
     assert devices[1].mac_address == "AA:BB:CC:DD:EE:FF"
     assert devices[1].rssi == -85
+
+
+@pytest.mark.asyncio
+async def test_get_scan_results_malformed_json(aiohttp_client) -> None:
+    """Verify get_scan_results handles non-list JSON gracefully."""
+
+    async def handle_malformed(request: web.Request) -> web.Response:
+        return web.json_response({"error": "scanner_busy", "code": 503})
+
+    app = web.Application()
+    app.router.add_get("/setup/bluetooth/scan_results", handle_malformed)
+
+    client = await aiohttp_client(app)
+    api_client = GoogleHomeApiClient(client.session, port=client.server.port, use_ssl=False)
+
+    speaker = SpeakerNode(
+        device_id="test-spk",
+        name="Test Speaker",
+        ip_address=str(client.server.host),
+        auth_token="test-token",
+    )
+
+    results = await api_client.get_scan_results(speaker)
+    assert results == []
+    assert speaker.available is True
 
 
 @pytest.mark.asyncio

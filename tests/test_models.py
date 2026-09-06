@@ -107,16 +107,38 @@ def test_speaker_proxy_state_model():
     assert state.last_scan_duration == 0.0
     assert state.last_scan_timestamp is None
     assert state.enabled is True
+    assert not state.trigger_scan_event.is_set()
 
-    called = []
+    # Test event set and clear
+    state.trigger_scan_event.set()
+    assert state.trigger_scan_event.is_set()
+    state.trigger_scan_event.clear()
+    assert not state.trigger_scan_event.is_set()
 
-    def cb():
-        called.append(True)
+    called_1 = []
+    called_2 = []
 
-    unreg = state.register_callback(cb)
+    def cb1():
+        called_1.append(True)
+
+    def cb2():
+        called_2.append(True)
+
+    unreg1 = state.register_callback(cb1)
+    unreg2 = state.register_callback(cb2)
+
     state.notify_callbacks()
-    assert len(called) == 1
+    assert len(called_1) == 1
+    assert len(called_2) == 1
 
-    unreg()
+    # Unregister first callback; second callback must continue receiving notifications
+    unreg1()
     state.notify_callbacks()
-    assert len(called) == 1
+    assert len(called_1) == 1
+    assert len(called_2) == 2
+
+    # Unregister second callback; no more notifications
+    unreg2()
+    state.notify_callbacks()
+    assert len(called_1) == 1
+    assert len(called_2) == 2

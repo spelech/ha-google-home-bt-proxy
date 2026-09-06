@@ -28,9 +28,10 @@ from custom_components.google_home_bt_proxy.models import DiscoveredDevice, Spea
 async def test_async_setup_and_unload():
     mock_hass = MagicMock()
     mock_hass.data = {}
+    mock_task = MagicMock()
     mock_hass.async_create_background_task.side_effect = lambda target, name=None: (
         target.close(),
-        MagicMock(),
+        mock_task,
     )[1]
 
     mock_entry = MagicMock()
@@ -70,9 +71,6 @@ async def test_async_setup_and_unload():
             assert DOMAIN in mock_hass.data
             assert mock_entry.entry_id in mock_hass.data[DOMAIN]
             assert mock_hass.async_create_background_task.call_count == 1
-
-            mock_task = MagicMock()
-            mock_hass.data[DOMAIN][mock_entry.entry_id]["worker_tasks"] = [mock_task]
 
             unload_result = await async_unload_entry(mock_hass, mock_entry)
             assert unload_result is True

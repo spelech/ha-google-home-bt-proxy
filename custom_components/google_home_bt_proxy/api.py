@@ -100,8 +100,17 @@ class GoogleHomeApiClient:
                 if resp.status == 200:
                     speaker.available = True
                     data = await resp.json()
+                    if not isinstance(data, list):
+                        _LOGGER.warning(
+                            "Unexpected scan results data format from %s: %s",
+                            speaker.name,
+                            type(data),
+                        )
+                        return []
                     results: list[DiscoveredDevice] = []
                     for item in data:
+                        if not isinstance(item, dict):
+                            continue
                         mac = item.get("mac_address")
                         rssi = item.get("rssi")
                         if mac and rssi is not None:
