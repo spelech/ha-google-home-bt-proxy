@@ -4,6 +4,7 @@
   "codeowners": ["@spelech"],
   "config_flow": true,
   "documentation": "https://github.com/spelech/ha-google-home-bt-proxy",
+  "issue_tracker": "https://github.com/spelech/ha-google-home-bt-proxy/issues",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "requirements": [

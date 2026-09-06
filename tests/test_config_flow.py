@@ -1,8 +1,11 @@
-"""Tests for config_flow."""
-
+import pathlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.config_entries import SOURCE_USER, ConfigEntries
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.loader import async_setup as async_setup_loader
 
 from custom_components.google_home_bt_proxy.config_flow import (
     GoogleHomeBtProxyConfigFlow,
@@ -11,11 +14,13 @@ from custom_components.google_home_bt_proxy.config_flow import (
 from custom_components.google_home_bt_proxy.const import (
     CONF_ANDROID_ID,
     CONF_MASTER_TOKEN,
+    CONF_OAUTH_TOKEN,
     CONF_PASSWORD,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
     CONF_USERNAME,
+    DOMAIN,
 )
 
 
@@ -162,3 +167,192 @@ async def test_options_flow_fallback_config_entry():
     handler.hass = mock_hass
     handler.handler = "test-entry-id"
     assert handler.config_entry == mock_entry
+
+
+@pytest.mark.asyncio
+async def test_config_flow_auto_import_existing_google_home_success():
+    """Test auto-importing credentials from existing google_home integration."""
+    repo_root = str(pathlib.Path(__file__).parent.parent)
+    hass = HomeAssistant(repo_root)
+    async_setup_loader(hass)
+    hass.config_entries = ConfigEntries(hass, {})
+
+    mock_entry = MagicMock()
+    mock_entry.domain = "google_home"
+    mock_entry.data = {
+        CONF_MASTER_TOKEN: "aas_et/test",
+        CONF_USERNAME: "test@gmail.com",
+        CONF_ANDROID_ID: "12345",
+    }
+    hass.config_entries.async_entries = MagicMock(return_value=[mock_entry])
+
+    with (
+        patch("homeassistant.config_entries.async_process_deps_reqs", AsyncMock(return_value=True)),
+        patch.object(hass.config_entries, "async_setup", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "import_existing"
+        assert result["description_placeholders"] == {"username": "test@gmail.com"}
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"import_credentials": True},
+        )
+        assert result2["type"] == FlowResultType.CREATE_ENTRY
+        assert result2["title"] == "Google Home Bluetooth Proxy (Imported)"
+        assert result2["data"] == mock_entry.data
+
+
+@pytest.mark.asyncio
+async def test_config_flow_auto_import_declined_falls_back_to_manual():
+    """Test declining auto-import falls back to the manual user form."""
+    repo_root = str(pathlib.Path(__file__).parent.parent)
+    hass = HomeAssistant(repo_root)
+    async_setup_loader(hass)
+    hass.config_entries = ConfigEntries(hass, {})
+
+    mock_entry = MagicMock()
+    mock_entry.domain = "google_home"
+    mock_entry.data = {
+        CONF_MASTER_TOKEN: "aas_et/test",
+        CONF_USERNAME: "test@gmail.com",
+        CONF_ANDROID_ID: "12345",
+    }
+    hass.config_entries.async_entries = MagicMock(return_value=[mock_entry])
+
+    with (
+        patch("homeassistant.config_entries.async_process_deps_reqs", AsyncMock(return_value=True)),
+        patch.object(hass.config_entries, "async_setup", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "import_existing"
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"import_credentials": False},
+        )
+        assert result2["type"] == FlowResultType.FORM
+        assert result2["step_id"] == "user"
+
+
+@pytest.mark.asyncio
+async def test_config_flow_auto_import_invalid_auth_falls_back_to_manual():
+    """Test invalid credentials during auto-import falls back to manual form with error."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow.hass = MagicMock()
+
+    mock_entry = MagicMock()
+    mock_entry.domain = "google_home"
+    mock_entry.data = {
+        CONF_MASTER_TOKEN: "aas_et/test",
+        CONF_USERNAME: "test@gmail.com",
+        CONF_ANDROID_ID: "12345",
+    }
+    flow.hass.config_entries.async_entries = MagicMock(return_value=[mock_entry])
+
+    result = await flow.async_step_user(None)
+    assert result["type"] == "form"
+    assert result["step_id"] == "import_existing"
+
+    with patch.object(flow, "_validate_credentials", return_value=False):
+        result2 = await flow.async_step_import_existing({"import_credentials": True})
+        assert result2["type"] == "form"
+        assert result2["step_id"] == "user"
+        assert result2["errors"] == {"base": "invalid_auth"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_auto_import_exception_falls_back_to_manual():
+    """Test exception during auto-import validation falls back to manual form with error."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow.hass = MagicMock()
+
+    mock_entry = MagicMock()
+    mock_entry.domain = "google_home"
+    mock_entry.data = {
+        CONF_MASTER_TOKEN: "aas_et/test",
+        CONF_USERNAME: "test@gmail.com",
+    }
+    flow.hass.config_entries.async_entries = MagicMock(return_value=[mock_entry])
+
+    result = await flow.async_step_user(None)
+    assert result["type"] == "form"
+    assert result["step_id"] == "import_existing"
+
+    with patch.object(flow, "_validate_credentials", side_effect=RuntimeError("Connection failed")):
+        result2 = await flow.async_step_import_existing({"import_credentials": True})
+        assert result2["type"] == "form"
+        assert result2["step_id"] == "user"
+        assert result2["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_oauth_token_exchange_success():
+    """Test successful oauth token exchange into master token."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    mock_hass = MagicMock()
+
+    async def _mock_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_mock_executor)
+    flow.hass = mock_hass
+
+    user_input = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_OAUTH_TOKEN: "oauth2_4/test_token",
+    }
+    with patch(
+        "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+        return_value={"Token": "aas_et/generated_master_token"},
+    ) as mock_exchange:
+        result = await flow.async_step_user(user_input)
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_MASTER_TOKEN] == "aas_et/generated_master_token"
+        assert CONF_OAUTH_TOKEN not in result["data"]
+        assert result["data"][CONF_USERNAME] == "user@gmail.com"
+        assert CONF_ANDROID_ID in result["data"]
+        mock_exchange.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_config_flow_oauth_token_exchange_failure():
+    """Test failed oauth token exchange shows invalid_auth."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    mock_hass = MagicMock()
+
+    async def _mock_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_mock_executor)
+    flow.hass = mock_hass
+
+    user_input = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_OAUTH_TOKEN: "invalid_token",
+    }
+    with patch(
+        "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+        return_value={"Error": "BadAuthentication"},
+    ):
+        result = await flow.async_step_user(user_input)
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "user"
+        assert result["errors"] == {"base": "invalid_auth"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_oauth_token_missing_username():
+    """Test oauth token without username shows invalid_auth."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow.hass = MagicMock()
+
+    user_input = {
+        CONF_OAUTH_TOKEN: "oauth2_4/test_token",
+    }
+    result = await flow.async_step_user(user_input)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "invalid_auth"}

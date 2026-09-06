@@ -1,11 +1,19 @@
-# 📡 ha-google-home-bt-proxy
+<p align="center">
+  <img src="images/icon.png" alt="Google Home Bluetooth Proxy Logo" width="160">
+</p>
 
-[![CI Quality Gate](https://github.com/spelech/ha-google-home-bt-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/spelech/ha-google-home-bt-proxy/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.11+-41BDF5.svg)](https://www.home-assistant.io/)
+<h1 align="center">ha-google-home-bt-proxy</h1>
 
-> **Turn your existing Google Home and Nest speakers into native Home Assistant Bluetooth proxy nodes for Bermuda BLE room-level presence tracking without extra ESP32 hardware.**
+<p align="center">
+  <em>Turn your existing Google Home and Nest speakers into native Home Assistant Bluetooth proxies for Bermuda BLE room tracking without extra hardware.</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/spelech/ha-google-home-bt-proxy/actions/workflows/ci.yml"><img src="https://github.com/spelech/ha-google-home-bt-proxy/actions/workflows/ci.yml/badge.svg" alt="CI Quality Gate"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+"></a>
+  <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.11+-41BDF5.svg" alt="Home Assistant"></a>
+</p>
 
 ---
 
