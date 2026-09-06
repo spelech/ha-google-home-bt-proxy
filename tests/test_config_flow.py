@@ -399,3 +399,79 @@ async def test_config_flow_oauth_token_missing_username():
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_speaker_overrides():
+    """Verify selecting a speaker advances to speaker settings and saves overrides."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_CUSTOM_SETTINGS,
+        CONF_SCAN_INTERVAL,
+        CONF_SCAN_TIMEOUT,
+        CONF_SELECTED_SPEAKER,
+        CONF_SPEAKER_OVERRIDES,
+        DOMAIN,
+    )
+    from custom_components.google_home_bt_proxy.models import SpeakerNode
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-options-speakers"
+    mock_entry.options = {}
+
+    speaker1 = SpeakerNode(
+        device_id="spk-office",
+        name="Office Mini",
+        ip_address="192.168.1.10",
+        auth_token="token-1",
+        hardware="Google Home Mini",
+    )
+    mock_coord = MagicMock()
+    mock_coord.speakers = {"spk-office": speaker1}
+
+    mock_hass = MagicMock()
+    mock_hass.data = {
+        DOMAIN: {
+            "test-options-speakers": {
+                "coordinator": mock_coord,
+            }
+        }
+    }
+
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler.hass = mock_hass
+
+    # 1. Initial step lists global + discovered speakers
+    init_form = await handler.async_step_init(None)
+    assert init_form["type"] == "form"
+    assert CONF_SELECTED_SPEAKER in [k.schema for k in init_form["data_schema"].schema.keys()]
+
+    # 2. Select spk-office -> transitions to speaker_settings step
+    select_result = await handler.async_step_init({CONF_SELECTED_SPEAKER: "spk-office"})
+    assert select_result["type"] == "form"
+    assert select_result["step_id"] == "speaker_settings"
+
+    # 3. Submit custom overrides for spk-office
+    speaker_input = {
+        CONF_CUSTOM_SETTINGS: True,
+        CONF_SCAN_INTERVAL: 45,
+        CONF_SCAN_TIMEOUT: 8,
+    }
+    save_result = await handler.async_step_speaker_settings(speaker_input)
+    assert save_result["type"] == "create_entry"
+    assert CONF_SPEAKER_OVERRIDES in save_result["data"]
+    assert "spk-office" in save_result["data"][CONF_SPEAKER_OVERRIDES]
+    assert save_result["data"][CONF_SPEAKER_OVERRIDES]["spk-office"][CONF_SCAN_INTERVAL] == 45
+    assert save_result["data"][CONF_SPEAKER_OVERRIDES]["spk-office"][CONF_SCAN_TIMEOUT] == 8
+
+    # 4. Now test removing overrides (unchecking custom_settings)
+    mock_entry.options = save_result["data"]
+    handler2 = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler2.hass = mock_hass
+    handler2._selected_speaker = "spk-office"
+
+    remove_input = {
+        CONF_CUSTOM_SETTINGS: False,
+    }
+    remove_result = await handler2.async_step_speaker_settings(remove_input)
+    assert remove_result["type"] == "create_entry"
+    assert "spk-office" not in remove_result["data"][CONF_SPEAKER_OVERRIDES]

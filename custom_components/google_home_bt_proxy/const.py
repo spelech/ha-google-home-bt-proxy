@@ -25,6 +25,11 @@ CONF_RSSI_THRESHOLD: Final = "rssi_threshold"
 CONF_RSSI_OFFSET: Final = "rssi_offset"
 CONF_DISABLED_SPEAKERS: Final = "disabled_speakers"
 CONF_KNOWN_IRKS: Final = "known_irks"
+CONF_SPEAKER_OVERRIDES: Final = "speaker_overrides"
+CONF_SELECTED_SPEAKER: Final = "selected_speaker"
+CONF_CUSTOM_SETTINGS: Final = "custom_settings"
+GLOBAL_SETTINGS: Final = "global"
+
 
 # Playback modes
 MODE_THROTTLE: Final = "throttle"

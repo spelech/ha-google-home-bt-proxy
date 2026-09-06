@@ -30,6 +30,22 @@
       "init": {
         "title": "Bluetooth Proxy Settings",
         "data": {
+          "selected_speaker": "Configure Settings For",
+          "playback_mode": "Media Playback Handling Mode",
+          "scan_timeout": "Idle Scan Duration (seconds)",
+          "scan_interval": "Idle Scan Interval (seconds)",
+          "playing_scan_timeout": "Playback Scan Duration (seconds)",
+          "playing_scan_interval": "Playback Scan Interval (seconds)",
+          "max_playing_skip_duration": "Max Continuous Playback Skip Ceiling (seconds)",
+          "rssi_threshold": "Minimum RSSI Threshold (dBm)",
+          "known_irks": "Known IRKs (Format: name:hex_key, one per line)"
+        }
+      },
+      "speaker_settings": {
+        "title": "Speaker Overrides: {speaker}",
+        "description": "Configure custom scanning and timing overrides for this specific speaker. Uncheck 'Enable Custom Settings' to inherit global defaults.",
+        "data": {
+          "custom_settings": "Enable Custom Settings for this Speaker",
           "playback_mode": "Media Playback Handling Mode",
           "scan_timeout": "Idle Scan Duration (seconds)",
           "scan_interval": "Idle Scan Interval (seconds)",
