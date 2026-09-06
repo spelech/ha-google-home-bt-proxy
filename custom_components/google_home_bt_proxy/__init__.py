@@ -11,8 +11,10 @@ from homeassistant.components import bluetooth, zeroconf
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import GoogleHomeApiClient, SpeakerConnectionError, TokenExpiredError
+from .auth_view import GoogleHomeBtProxyAuthCallbackView
 from .const import (
     CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
@@ -34,6 +36,12 @@ from .models import SpeakerNode
 from .scanner import GoogleHomeRemoteScanner
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up Google Home Bluetooth Proxy component."""
+    hass.http.register_view(GoogleHomeBtProxyAuthCallbackView)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
