@@ -58,6 +58,9 @@ def test_playback_constants():
     )
 
     assert CONF_PLAYBACK_MODE == "playback_mode"
+    assert CONF_PLAYING_SCAN_TIMEOUT == "playing_scan_timeout"
+    assert CONF_PLAYING_SCAN_INTERVAL == "playing_scan_interval"
+    assert CONF_MAX_PLAYING_SKIP_DURATION == "max_playing_skip_duration"
     assert MODE_THROTTLE == "throttle"
     assert MODE_SKIP_CEILING == "skip_ceiling"
     assert MODE_IGNORE == "ignore"
@@ -65,4 +68,3 @@ def test_playback_constants():
     assert DEFAULT_PLAYING_SCAN_TIMEOUT == 2
     assert DEFAULT_PLAYING_SCAN_INTERVAL == 30
     assert DEFAULT_MAX_PLAYING_SKIP_DURATION == 120
-

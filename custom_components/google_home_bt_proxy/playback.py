@@ -20,7 +20,7 @@ ACTIVE_PLAYER_STATES = {"PLAYING", "BUFFERING"}
 
 
 class SpeakerPlaybackDetector:
-    """Detects active media playback directly against a speaker without Home Assistant core dependencies."""
+    """Detects active media playback directly against a speaker without HA dependencies."""
 
     def __init__(self, api_client: GoogleHomeApiClient, cast_timeout: float = 3.0) -> None:
         """Initialize the playback detector."""

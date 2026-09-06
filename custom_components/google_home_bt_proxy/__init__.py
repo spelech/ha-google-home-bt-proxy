@@ -195,7 +195,8 @@ async def _speaker_scan_loop(
                 elapsed_skip = now - continuous_skip_start
                 if elapsed_skip >= max_skip_duration:
                     _LOGGER.info(
-                        "Max continuous skip ceiling reached (%0.1fs >= %0.1fs) on %s; forcing refresh scan",
+                        "Max continuous skip ceiling reached (%0.1fs >= %0.1fs) on %s; "
+                        "forcing refresh scan",
                         elapsed_skip,
                         max_skip_duration,
                         speaker.name,

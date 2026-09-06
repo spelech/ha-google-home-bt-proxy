@@ -169,4 +169,3 @@ class GoogleHomeApiClient:
         except (aiohttp.ClientError, TimeoutError) as err:
             speaker.available = False
             raise SpeakerConnectionError(f"Connection failed to {speaker.name}: {err}") from err
-

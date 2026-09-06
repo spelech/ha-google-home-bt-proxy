@@ -70,7 +70,11 @@ async def test_is_playing_handles_exceptions_gracefully(speaker, mock_api_client
     mock_api_client.get_bluetooth_status.side_effect = Exception("API connection dropped")
     detector = SpeakerPlaybackDetector(mock_api_client, cast_timeout=1.0)
 
-    with patch.object(detector, "_check_cast_playing", AsyncMock(side_effect=Exception("Cast socket timeout"))):
+    with patch.object(
+        detector,
+        "_check_cast_playing",
+        AsyncMock(side_effect=Exception("Cast socket timeout")),
+    ):
         is_playing = await detector.async_is_playing(speaker)
         assert is_playing is False
 

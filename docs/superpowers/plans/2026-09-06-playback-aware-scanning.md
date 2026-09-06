@@ -56,6 +56,7 @@ def test_playback_constants():
         MODE_SKIP_CEILING,
         MODE_THROTTLE,
     )
+
     assert CONF_PLAYBACK_MODE == "playback_mode"
     assert MODE_THROTTLE == "throttle"
     assert MODE_SKIP_CEILING == "skip_ceiling"
@@ -108,11 +109,13 @@ Add to `tests/test_api.py`:
 async def test_get_bluetooth_status(aiohttp_client):
     async def handle_status(request):
         assert request.headers.get("cast-local-authorization-token") == "test-token"
-        return web.json_response({
-            "connected_devices": [
-                {"mac_address": "11:22:33:44:55:66", "name": "Phone", "device_class": 5898764}
-            ]
-        })
+        return web.json_response(
+            {
+                "connected_devices": [
+                    {"mac_address": "11:22:33:44:55:66", "name": "Phone", "device_class": 5898764}
+                ]
+            }
+        )
 
     app = web.Application()
     app.router.add_get("/setup/bluetooth/status", handle_status)
@@ -222,6 +225,7 @@ async def test_options_flow_with_playback_settings():
         CONF_MAX_PLAYING_SKIP_DURATION,
         MODE_SKIP_CEILING,
     )
+
     entry = MagicMock()
     entry.options = {}
     handler = GoogleHomeBtProxyOptionsFlowHandler(entry)

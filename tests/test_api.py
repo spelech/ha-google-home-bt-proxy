@@ -239,13 +239,16 @@ async def test_connection_error_raises_speaker_connection_error() -> None:
 @pytest.mark.asyncio
 async def test_get_bluetooth_status(aiohttp_client) -> None:
     """Verify get_bluetooth_status returns bluetooth status data."""
+
     async def handle_status(request: web.Request) -> web.Response:
         assert request.headers.get("cast-local-authorization-token") == "test-token"
-        return web.json_response({
-            "connected_devices": [
-                {"mac_address": "11:22:33:44:55:66", "name": "Phone", "device_class": 5898764}
-            ]
-        })
+        return web.json_response(
+            {
+                "connected_devices": [
+                    {"mac_address": "11:22:33:44:55:66", "name": "Phone", "device_class": 5898764}
+                ]
+            }
+        )
 
     app = web.Application()
     app.router.add_get("/setup/bluetooth/status", handle_status)
@@ -263,4 +266,3 @@ async def test_get_bluetooth_status(aiohttp_client) -> None:
     assert "connected_devices" in status
     assert len(status["connected_devices"]) == 1
     assert status["connected_devices"][0]["name"] == "Phone"
-

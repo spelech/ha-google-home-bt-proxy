@@ -448,4 +448,3 @@ async def test_speaker_scan_loop_playback_ignore():
     mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=5)
     mock_sleep.assert_any_call(5)
     mock_sleep.assert_any_call(10)
-
