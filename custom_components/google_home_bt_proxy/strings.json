@@ -10,6 +10,13 @@
           "master_token": "Master Token (Alternative to Password)",
           "android_id": "Android ID"
         }
+      },
+      "import_existing": {
+        "title": "Import Google Home Credentials",
+        "description": "Found existing Google Home configuration for {username}. Would you like to import these credentials?",
+        "data": {
+          "import_credentials": "Import credentials from Google Home"
+        }
       }
     },
     "error": {
