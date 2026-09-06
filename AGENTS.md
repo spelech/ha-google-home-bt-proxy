@@ -1,10 +1,10 @@
-# 🤖 Universal AGENTS.md
+# Universal AGENTS.md
 
 Mandatory architectural guidelines and execution rules for AI coding assistants.
 
 ---
 
-## 🤝 1. Collaboration & Workflow Discipline
+## 1. Collaboration & Workflow Discipline
 
 1. **Proactive Clarifying Questions**: Steven's conceptual designs evolve during development. **Always ask insightful clarifying questions** to nail down requirements, edge cases, and architectural constraints.
 2. **Git Branch & Release Flow**:
@@ -18,7 +18,7 @@ Mandatory architectural guidelines and execution rules for AI coding assistants.
 
 ---
 
-## 🏛️ 2. Core Code & Architectural Discipline
+## 2. Core Code & Architectural Discipline
 
 1. **SOLID & Single Responsibility**: Decompose files and classes exceeding **500 lines of code** into partial classes or focused sub-services.
 2. **Interfaces by Default**: Build client-focused interfaces (`I*` in C#) even for single implementations to ensure loose coupling and testability.
@@ -37,7 +37,7 @@ Mandatory architectural guidelines and execution rules for AI coding assistants.
 
 ---
 
-## 💻 3. Polyglot Language Matrix
+## 3. Polyglot Language Matrix
 
 - **C# (.NET 9)**: `.slnx`, `System.CommandLine`, full DI, Dapper + Stored Procs (separate `.sql` files), SQLite WAL (MySQL-compatible) / MSSQL, native C# UIs (WPF/WinForms/Avalonia, no Electron), full `CancellationToken` propagation.
 - **Python (3.12+)**: `uv`, `pyproject.toml`, FastAPI + FastMCP, Pydantic v2 schemas, `asyncio`, `pytest` ($\ge$ 80% coverage), `ruff`.
@@ -46,7 +46,7 @@ Mandatory architectural guidelines and execution rules for AI coding assistants.
 
 ---
 
-## 🧪 4. Testing & Agent Verification Protocol
+## 4. Testing & Agent Verification Protocol
 
 1. **Test Harnesses**: Build closed-loop simulation harnesses with high-volume testing loops whenever crossing API/network boundaries or building tunable algorithms.
 2. **Coverage**: Maintain $\ge$ 80% code coverage across unit, integration, and E2E suites.

@@ -5,7 +5,7 @@
 <h1 align="center">ha-google-home-bt-proxy</h1>
 
 <p align="center">
-  <em>Turn your existing Google Home and Nest speakers into native Home Assistant Bluetooth proxies for Bermuda BLE room tracking without extra hardware.</em>
+  <em>A Home Assistant integration that turns Google Home and Nest speakers into Bluetooth proxies.</em>
 </p>
 
 <p align="center">
@@ -17,181 +17,166 @@
 
 ---
 
-## 🎯 Features
+## Features
 
-- **Native Bluetooth Remote Scanner**: Implements `habluetooth.BaseHaRemoteScanner` to inject discovered Bluetooth advertisements directly into Home Assistant's native Bluetooth Manager.
-- **Advanced Signal Processing & RSSI Smoothing**: Rolling median and Exponential Moving Average (EMA) filters to reject multipath flutter, antenna bounce, and signal spikes.
-- **Log-Distance Path Loss Distance Estimation**: Dynamically estimates physical distance in meters ($d = 10^{\frac{\text{ref\_power} - \text{RSSI}}{10 \times n}}$) with customizable absorption exponents and reference power.
-- **Floor Boundary & Distance Gating**: Drop distant or cross-floor advertisements exceeding `max_distance` to eliminate adjacent-room false triggers.
-- **Ephemeral MAC Filtering & Target Whitelisting**: Three selective filtering modes (`all`, `known_only`, `whitelist`) to suppress random ephemeral MACs (RPAs) and eliminate event bus noise.
-- **Synchronized Round-Robin Scan Orchestrator**: Serializes active 2.4GHz hardware inquiry scans across multi-speaker setups to prevent packet collisions and Wi-Fi throughput drops.
-- **Autonomous Playback Protection**: Direct, standalone Cast V2 and Bluetooth A2DP audio streaming detection that automatically pauses or throttles BLE inquiry scans during active playback without coupling to Home Assistant's `media_player` entities.
-- **Hierarchical Per-Speaker Overrides**: Customize scan intervals, scan timeouts, playback modes, and RF offsets per speaker or fall back to global entry defaults.
-- **Operational Diagnostics & Controls**: First-class Home Assistant entities per speaker:
-  - `sensor.*_bluetooth_proxy_status`: Live scanning lifecycle state (`idle`, `waiting_slot`, `scanning`, `playback_throttled`, etc.).
-  - `sensor.*_bluetooth_advertisements_processed`: Monotonic counter of packets successfully injected.
-  - `sensor.*_bluetooth_advertisements_filtered`: Real-time counter of dropped packets suppressed by distance or target filters.
-  - `switch.*_bluetooth_proxy`: Instantly enable or disable scanning on individual speakers.
-  - `button.*_trigger_bluetooth_scan`: Manually trigger an on-demand hardware inquiry scan.
-- **Self-Healing Connection**: Automatically handles Google local authorization token renewal via `glocal tokens` and recovers from temporary Wi-Fi drops with exponential backoff.
-- **Empirical Diagnostic Probe**: Includes `scripts/probe_speaker.py` for testing, classifying, and verifying speaker endpoints (`/setup/bluetooth/scan`, `/setup/bluetooth/scan_results`, Cast V2 socket) from the command line.
+- **Bluetooth Remote Scanner**: Uses Home Assistant's native Bluetooth remote scanner interface (`habluetooth.BaseHaRemoteScanner`) to inject discovered BLE advertisements directly into Home Assistant.
+- **Signal Filtering and Smoothing**: Supports rolling median and exponential moving average (EMA) filters to reduce RSSI fluctuations. Can be disabled to forward raw calibrated values.
+- **Distance Estimation**: Calculates approximate distance in meters using a log-distance path loss formula. Can be disabled if distance calculations are not needed.
+- **Distance Cutoff**: Drops advertisements beyond a configured `max_distance` threshold.
+- **Target Filtering**: Provides `all`, `known_only` (named or IRK-resolved devices), and `whitelist` modes to suppress randomized private addresses (RPAs) and filter noise.
+- **Scan Orchestration**: Serializes active Bluetooth scans across speakers in round-robin order to minimize 2.4GHz Wi-Fi and Bluetooth interference.
+- **Playback Awareness**: Detects active Cast V2 media sessions and Bluetooth audio connections to throttle or pause scans during media playback.
+- **Per-Speaker Settings**: Overrides scan intervals, timeouts, playback handling, and calibration offsets per speaker or falls back to global defaults.
+- **Entities and Controls**: Provides status and packet counter sensors, an on/off switch to toggle scanning per speaker, and a button to trigger manual scans.
+- **Token Handling**: Automatically handles Google local authorization token renewal and retries connection failures with backoff.
+- **Diagnostic Tool**: Includes `scripts/probe_speaker.py` to inspect local speaker endpoints and verify device capabilities.
 
 ---
 
-## 📸 Screenshots & UI
+## Screenshots
 
 <p align="center">
   <img src="images/options_flow.jpg" alt="Integration Options Flow Dialog" width="700">
   <br>
-  <em>Advanced Options Flow with Multi-Speaker Orchestration, Distance Gating, and RSSI Smoothing</em>
+  <em>Options Flow showing orchestration, distance gating, and signal smoothing settings.</em>
 </p>
 
 <p align="center">
   <img src="images/diagnostics.jpg" alt="Device Diagnostics & Controls Card" width="600">
   <br>
-  <em>Lovelace Device Card showing Operational Status, Processed vs Filtered Packets, Switch, and Scan Trigger</em>
+  <em>Device card showing operational status, packet counters, proxy toggle switch, and scan trigger button.</em>
 </p>
 
 ---
 
-## 📱 Hardware Compatibility Matrix
+## Hardware Compatibility
 
-For an exhaustive hardware breakdown, see the complete [Hardware Compatibility Matrix](docs/hardware_matrix.md).
+For technical details on ports and protocols, see [docs/hardware_matrix.md](docs/hardware_matrix.md).
 
-| Hardware Device | Subsystem / OS | BLE Proxy | Playback Detection | Role & Status |
-| :--- | :--- | :---: | :---: | :--- |
-| **Google Home Mini** (1st Gen) | CastOS / ARMv7 | ✅ Full | ✅ Cast V2 + A2DP | **Recommended**: High performance distributed scanner |
-| **Google Nest Mini** (2nd Gen) | CastOS / ARMv8 | ✅ Full | ✅ Cast V2 + A2DP | **Recommended**: Sensitive RF front-end |
-| **Google Home / Home Max / Nest Audio**| CastOS / ARMv7/v8 | ✅ Full | ✅ Cast V2 + A2DP | **Fully Supported**: Full setup API and BLE scanner |
-| **Google Nest Hub / Hub Max** | Fuchsia / CastOS | ⚠️ Partial | ✅ Cast V2 | **Notice**: Display radios prioritize Zigbee/Thread time-slicing |
-| **Android TV / Google TV (SHIELD, Smart TVs)** | Android TV OS | ❌ Ineligible | ✅ Cast V2 | **Playback-Only**: Bluetooth managed by Android OS (Port 8443 returns 404) |
-| **Third-Party Cast Soundbars** | OEM Cast Linux | ❌ Ineligible | ✅ Cast V2 | **Playback-Only**: Firmware rejects scan commands with 400 Bad Request |
-| **Google Cast Groups** | Virtual mDNS | ❌ Ineligible | ✅ Cast V2 | **Filtered**: Automatically skipped (no physical radio) |
+| Device | Operating System | BLE Proxy | Playback Detection | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Google Home Mini** (1st Gen) | CastOS | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Nest Mini** (2nd Gen) | CastOS | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Home / Home Max / Nest Audio** | CastOS | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Nest Hub / Hub Max** | Fuchsia / CastOS | Partial | Cast V2 | Experimental; display radios prioritize Thread/Zigbee |
+| **Android TV / Google TV** (Shield, smart TVs) | Android TV OS | Unsupported | Cast V2 | Playback detection only; Bluetooth is managed by Android OS |
+| **Third-Party Cast Soundbars** | Cast Linux | Unsupported | Cast V2 | Playback detection only; firmware rejects scan commands |
+| **Cast Speaker Groups** | Virtual mDNS | Unsupported | Cast V2 | Skipped; virtual group endpoint with no physical radio |
 
 ---
 
-## 🚀 Quickstart
+## Installation
 
-### 1. Installation
+### HACS (Recommended)
 
-#### HACS (Custom Repository)
 1. In Home Assistant, open **HACS** > **Integrations**.
-2. Click the three dots in the top-right corner > **Custom repositories**.
+2. Open the menu in the top-right corner and select **Custom repositories**.
 3. Enter `https://github.com/spelech/ha-google-home-bt-proxy` as the Repository and select **Integration** as the Category.
-4. Search for **Google Home Bluetooth Proxy**, click **Download**, and restart Home Assistant.
+4. Click **Download**, then restart Home Assistant.
 
-#### Manual Installation
-Clone or download this repository and copy `custom_components/google_home_bt_proxy` into your Home Assistant `config/custom_components/` directory:
+### Manual Installation
+
+Copy `custom_components/google_home_bt_proxy` into your Home Assistant `config/custom_components/` directory:
 
 ```bash
 cp -r custom_components/google_home_bt_proxy /path/to/homeassistant/config/custom_components/
 ```
+
 Restart Home Assistant.
 
 ---
 
-### 2. Configuration
+## Configuration
 
-1. In the Home Assistant UI, go to **Settings** > **Devices & Services** > **Add Integration**.
+1. In Home Assistant, navigate to **Settings** > **Devices & Services** > **Add Integration**.
 2. Search for **Google Home Bluetooth Proxy**.
-3. Provide your Google Account credentials:
-   - **Recommended**: Provide your Google **Master Token** (`oauth2_rt_...`) and **Android ID** (or use the companion browser extension).
+3. Enter your Google account credentials:
+   - **Recommended**: Enter your Google **Master Token** (`oauth2_rt_...`) and **Android ID** (or use the companion browser extension in `extensions/google_home_auth_extension`).
    - **Alternative**: Enter your Google account email and an App Password.
-4. Once authenticated, the integration discovers all Google Home and Nest speakers on your local network and registers a Bluetooth scanner proxy for each enabled speaker.
+4. The integration discovers supported speakers on your local network and sets up Bluetooth scanner proxies for them.
 
-#### Configuration Options
-Access **Configure** on the integration card to adjust global defaults or configure specific speakers (see [Signal Processing Technical Guide](docs/signal_processing.md) for formulas and calibration guidelines):
-- **Configure Specific Speaker**: Select any speaker to customize its individual parameters, or select `Global Settings` to set integration-wide defaults.
-- **Multi-Speaker Orchestration** (`orchestration_mode`): Serializes active hardware scans across speakers using `round_robin` to eliminate 2.4GHz Wi-Fi/BT inquiry contention, or `independent` (default: `round_robin`).
-- **Hardware Scan Duration** (`scan_timeout`): Duration in seconds for each active inquiry scan on the speaker (default: `5s`).
-- **Interval Between Scans** (`scan_interval`): Cooldown pause between scans (default: `10s`).
-- **Minimum RSSI Threshold** (`rssi_threshold`): Discards weak or fringe signals below this dBm value (default: `-90 dBm`).
-- **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied before smoothing and distance estimation (default: `0 dBm`).
-- **Target Filter Mode** (`filter_mode`): Selective ingestion mode: `all`, `known_only` (named or IRK-resolved devices), or `whitelist` (default: `all`).
-- **Tracked Devices** (`tracked_devices`): Comma-separated list of MAC addresses, OUI prefixes (e.g. `AA:BB:CC`), or name substrings (e.g. `Beacon`, `Tile`).
-- **Enable RSSI Smoothing** (`enable_rssi_smoothing`): Toggle multi-sample smoothing on/off (default: `true`). When disabled, raw calibrated RSSI is emitted without buffer averaging.
-- **RSSI Smoothing Algorithm** (`rssi_filter_mode`): Multi-sample algorithm: `none`, `median` (recommended for outlier rejection), or `ema` (default: `median`).
-- **Smoothing Window Size** (`rssi_filter_window`): Number of historical samples retained for smoothing (default: `3`).
-- **Enable Distance Estimation** (`enable_distance_estimation`): Toggle log-distance path loss distance calculations on/off (default: `true`). When disabled, distance calculations and boundary cutoffs are bypassed.
-- **Maximum Distance Cutoff** (`max_distance`): Boundary threshold in meters. Advertisements estimated beyond this distance are dropped to prevent cross-room/floor bleed (`0.0` disables cutoff, default: `0.0m`).
-- **Reference RSSI at 1 Meter** (`ref_power`): Expected signal strength in dBm at 1m line-of-sight for distance estimation (default: `-59 dBm`).
-- **Path Loss Exponent** (`path_loss_exponent`): Environmental RF absorption factor $n$ (`2.0` = free space, `2.5 - 3.5` = indoor walls, default: `2.5`).
-- **Playback Mode** (`playback_mode`): Action during active media playback: `throttle` interval, `skip_ceiling`, or `ignore` (default: `throttle`).
-- **Known IRKs** (`known_irks`): Resolves iOS/macOS/watchOS private resolvable addresses (format: `name:hex_key`, one per line).
+### Configuration Options
 
----
+Click **Configure** on the integration card to adjust settings globally or for specific speakers:
 
-## 📍 Bermuda BLE Room Presence Integration
-
-[Bermuda](https://github.com/agittins/bermuda) is a popular Home Assistant integration that tracks BLE devices (iBeacons, smartwatches, smartphones, fitness bands) and calculates which room they are in based on signal strengths reported by Bluetooth proxies.
-
-1. **Verify Proxies in Home Assistant**:
-   - Go to **Settings** > **Devices & Services** > **Bluetooth**.
-   - You will see each Google Home speaker listed as a remote Bluetooth scanner (e.g. `Living Room Speaker Bluetooth Proxy`).
-2. **Assign Speakers to Areas**:
-   - Assign each speaker's proxy device to its corresponding physical Area/Room in Home Assistant (e.g. *Living Room*, *Kitchen*, *Office*).
-3. **Configure Bermuda**:
-   - Install and open the **Bermuda BLE Trilateration** integration.
-   - Bermuda will automatically detect the Google Home proxy scanners from the Bluetooth framework.
-   - Set each scanner's reference location/area. Bermuda will then provide room-level `device_tracker` and `sensor` entities for all tracked BLE devices.
-4. **Calibrate RSSI**:
-   - If using mixed generations (e.g. Nest Mini Gen 2 alongside Home Mini Gen 1), use the `rssi_offset` option on individual speakers to align reported dBm signals for balanced distance calculations.
+- **Configure Settings For**: Choose `Global Settings` or a specific speaker to customize.
+- **Multi-Speaker Orchestration** (`orchestration_mode`): `round_robin` to serialize scans across speakers, or `independent` (default: `round_robin`).
+- **Idle Scan Duration** (`scan_timeout`): Duration in seconds for each active scan (default: `5s`).
+- **Idle Scan Interval** (`scan_interval`): Pause between scans in seconds (default: `10s`).
+- **Playback Scan Duration / Interval** (`playing_scan_timeout`, `playing_scan_interval`): Scan timing while media is playing.
+- **Playback Handling Mode** (`playback_mode`): `throttle` (slower scans during playback), `skip_ceiling` (pause until max duration), or `ignore` (default: `throttle`).
+- **Minimum RSSI Threshold** (`rssi_threshold`): Minimum signal level in dBm to ingest (default: `-90 dBm`).
+- **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied to incoming signals (default: `0 dBm`).
+- **Target Filter Mode** (`filter_mode`): `all`, `known_only` (named or IRK-resolved devices), or `whitelist` (default: `all`).
+- **Tracked Devices** (`tracked_devices`): Comma-separated list of MAC addresses, prefixes (e.g. `AA:BB:CC`), or name substrings.
+- **Enable RSSI Smoothing** (`enable_rssi_smoothing`): Enables rolling smoothing filter (default: `true`).
+- **RSSI Smoothing Algorithm** (`rssi_filter_mode`): `none`, `median`, or `ema` (default: `median`).
+- **Smoothing Window Size** (`rssi_filter_window`): Number of samples kept for smoothing (default: `3`).
+- **Enable Distance Estimation** (`enable_distance_estimation`): Enables distance calculation and distance gating (default: `true`).
+- **Maximum Distance Cutoff** (`max_distance`): Drops packets estimated beyond this distance in meters (`0.0` disables cutoff, default: `0.0m`).
+- **Reference RSSI at 1 Meter** (`ref_power`): Expected RSSI at 1 meter in dBm (default: `-59 dBm`).
+- **Path Loss Exponent** (`path_loss_exponent`): RF attenuation factor $n$ (indoor default: `2.5`).
+- **Known IRKs** (`known_irks`): Resolves private addresses for iOS and macOS devices (format: `name:hex_key`, one per line).
 
 ---
 
-## 🔍 Empirical Speaker Probing Utility
+## Bermuda Integration
 
-The repository includes a standalone diagnostic tool to test speaker Bluetooth scanning and classify device compatibility directly:
+[Bermuda](https://github.com/agittins/bermuda) is a Home Assistant integration that tracks BLE devices (beacons, phones, wearables) and estimates room presence using Bluetooth proxy RSSI data.
+
+1. **Verify Proxies**: In **Settings** > **Devices & Services** > **Bluetooth**, verify that your speakers appear as remote Bluetooth scanners.
+2. **Assign Areas**: Assign each speaker device to its physical room in Home Assistant (e.g., Living Room, Kitchen).
+3. **Configure Bermuda**: In Bermuda settings, set the reference location for each scanner. Bermuda will use the proxy data for room presence tracking.
+4. **Calibrate Offsets**: If you use multiple speaker generations (such as Home Mini Gen 1 and Nest Mini Gen 2), set `rssi_offset` per speaker to align signal levels. See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for calibration steps.
+
+---
+
+## Diagnostic Probe Script
+
+The repository includes a script to test speaker endpoints and verify compatibility:
 
 ```bash
-# Basic discovery probe (checks eureka_info and classifies device)
+# Basic probe: checks eureka_info and open endpoints
 uv run scripts/probe_speaker.py --host 192.168.1.110
 
-# Full inquiry scan and Cast V2 socket verification with local token
+# Scan probe: runs an inquiry scan with local auth token
 uv run scripts/probe_speaker.py --host 192.168.1.110 --token "your-token" --timeout 5 --check-cast
 ```
 
-### Options:
-- `--host`: IP address of your Google Home speaker, Cast TV, or soundbar.
+### Options
+- `--host`: IP address of the speaker or Cast device.
 - `--port`: HTTPS API port (default: `8443`).
-- `--token`: Speaker local authorization token (optional for open status/eureka endpoints).
-- `--timeout`: Hardware scan window in seconds (default: `5`).
-- `--check-cast`: Probes the Cast V2 TLS control socket on port `8009`.
+- `--token`: Local authorization token.
+- `--timeout`: Scan duration in seconds (default: `5`).
+- `--check-cast`: Probes the Cast V2 TLS socket on port `8009`.
 
-The script queries:
-- `GET /setup/eureka_info`: Device metadata, firmware, and capabilities.
-- `GET /setup/bluetooth/status`: Bluetooth subsystem readiness.
+The script tests:
+- `GET /setup/eureka_info`: Firmware version and capabilities.
+- `GET /setup/bluetooth/status`: Bluetooth state.
 - `POST /setup/bluetooth/scan`: Triggers an active inquiry scan.
-- `GET /setup/bluetooth/scan_results`: Dumps detected MAC addresses, RSSI values, and device names.
-- Socket probe on port `8009`: Verifies Cast V2 media controller connectivity.
-- Automatically outputs hardware classification (Fully Compatible, Android TV Playback-Only, or Third-Party Cast).
+- `GET /setup/bluetooth/scan_results`: Displays detected devices and RSSI values.
+- Port `8009`: Checks Cast V2 media controller connectivity.
 
 ---
 
-## 🏗️ Architecture
+## Development & Testing
 
-For in-depth architectural details, sequence flows, and subsystem diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
-
----
-
-## 🛠️ Development & Testing
-
-This project uses `uv` for package management, `ruff` for linting and formatting, and `pytest` for testing:
+This project uses `uv`, `ruff`, and `pytest`:
 
 ```bash
-# Install dependencies into virtual environment
+# Install dependencies
 uv sync
 
-# Run format and lint checks
+# Format and lint checks
 uv run ruff format --check .
 uv run ruff check .
 
-# Run pytest suite with >= 80% coverage requirement
+# Run tests with coverage
 uv run pytest --cov=custom_components/google_home_bt_proxy --cov-fail-under=80 -v
 ```
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

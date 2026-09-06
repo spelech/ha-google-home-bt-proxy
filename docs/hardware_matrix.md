@@ -1,113 +1,81 @@
-# Google Cast & Google Home Hardware Compatibility Matrix
+# Hardware Compatibility Matrix
 
-This document details hardware architecture, operating systems, network ports, authentication mechanisms, Bluetooth capabilities, and media playback detection behaviors across Google Cast, Google Home, Nest, and third-party streaming devices.
-
-All data in this document has been empirically validated against real-world hardware running live in local test environments.
+This document outlines hardware support, operating systems, network ports, authentication requirements, Bluetooth capabilities, and playback detection across Google Home, Nest, and Cast devices.
 
 ---
 
-## 📊 Hardware Support Overview
+## Device Support Table
 
-| Hardware Model | Form Factor | OS & Architecture | Setup API (Port 8443) | Cast V2 (Port 8009) | Remote BLE Proxy | Playback Detection | Status & Recommendations |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Google Home Mini** (1st Gen) | Smart Speaker | CastOS / ARMv7 (Marvell 88DE3006) | ✅ Full (Token req.) | ✅ Active | ✅ Full Support | Cast V2 + A2DP (Port 8443) | **Recommended**: Excellent, low-cost distributed proxy node |
-| **Google Nest Mini** (2nd Gen) | Smart Speaker | CastOS / ARMv8 (Synaptics AS370) | ✅ Full (Token req.) | ✅ Active | ✅ Full Support | Cast V2 + A2DP (Port 8443) | **Recommended**: Highly sensitive RF front-end |
-| **Google Home** (Original / "Air Freshener") | Smart Speaker | CastOS / ARMv7 (Marvell 88DE3006) | ✅ Full (Token req.) | ✅ Active | ✅ Full Support | Cast V2 + A2DP (Port 8443) | **Fully Supported**: Identical API & stack to Home Mini |
-| **Google Home Max** | Large Speaker | CastOS / ARMv7 | ✅ Full (Token req.) | ✅ Active | ✅ Full Support | Cast V2 + A2DP (Port 8443) | **Fully Supported**: High-gain antenna array |
-| **Google Nest Audio** | Smart Speaker | CastOS / ARMv8 (Amlogic A113X) | ✅ Full (Token req.) | ✅ Active | ✅ Full Support | Cast V2 + A2DP (Port 8443) | **Recommended**: Modern SoC, fast inquiry processing |
-| **Google Nest Hub / Hub Max** | Smart Display | Fuchsia OS / ARMv8 | ⚠️ Partial | ✅ Active | ⚠️ Experimental | Cast V2 (Port 8009) | **Notice**: Display radios prioritize Zigbee/Thread time-slicing |
-| **NVIDIA SHIELD Android TV** | Set-Top Box | Android TV OS / ARMv8 (Tegra X1+) | ❌ Returns 404 on BT | ✅ Active | ❌ Ineligible | Cast V2 (Port 8009) | **Playback-Only**: Bluetooth managed by Android OS subsystem |
-| **Smart TV Pro / Sony / TCL** | Google TV | Google TV OS / ARMv8 (MediaTek/RTK) | ❌ Returns 404 on BT | ✅ Active | ❌ Ineligible | Cast V2 (Port 8009) | **Playback-Only**: Bluetooth managed by Android OS subsystem |
-| **Chromecast with Google TV** | Streaming Dongle | Android TV OS / ARMv8 (Amlogic S905X3) | ❌ Returns 404 on BT | ✅ Active | ❌ Ineligible | Cast V2 (Port 8009) | **Playback-Only**: Bluetooth managed by Android OS subsystem |
-| **Chromecast (Gen 1 - 3, Ultra)** | Streaming Dongle | CastOS / ARMv7 | ❌ No BLE Radio | ✅ Active | ❌ Ineligible | Cast V2 (Port 8009) | **Playback-Only**: Lacks hardware Bluetooth adapter |
-| **Third-Party Cast Soundbars** (e.g. Samsung Q700B) | Audio Soundbar | OEM Cast Embedded Linux | ❌ Rejects scan (400) | ✅ Active | ❌ Ineligible | Cast V2 (Port 8009) | **Playback-Only**: OEM firmware omits Google BLE scan daemon |
-| **Google Cast Audio Groups** | Virtual Multi-Room | Software mDNS / Dynamic Ports | ❌ None | ✅ Active (High Ports) | ❌ Ineligible | Cast V2 Group State | **Filtered Automatically**: Virtual endpoint, no physical radio |
+| Device | Operating System | Setup API (Port 8443) | Cast V2 (Port 8009) | BLE Proxy | Playback Detection | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Google Home Mini** (1st Gen) | CastOS / ARMv7 | Supported (token required) | Open | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Nest Mini** (2nd Gen) | CastOS / ARMv8 | Supported (token required) | Open | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Home** (Original) | CastOS / ARMv7 | Supported (token required) | Open | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Home Max** | CastOS / ARMv7 | Supported (token required) | Open | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Nest Audio** | CastOS / ARMv8 | Supported (token required) | Open | Supported | Cast V2 + A2DP | Fully supported |
+| **Google Nest Hub / Hub Max** | Fuchsia / CastOS | Partial | Open | Partial | Cast V2 | Experimental; display radios prioritize Thread/Zigbee |
+| **NVIDIA SHIELD Android TV** | Android TV OS | Returns 404 on BT endpoints | Open | Unsupported | Cast V2 | Playback detection only; Bluetooth managed by Android OS |
+| **Sony / TCL / Hisense Smart TVs** | Google TV OS | Returns 404 on BT endpoints | Open | Unsupported | Cast V2 | Playback detection only; Bluetooth managed by Android OS |
+| **Chromecast with Google TV** | Android TV OS | Returns 404 on BT endpoints | Open | Unsupported | Cast V2 | Playback detection only; Bluetooth managed by Android OS |
+| **Chromecast (Gen 1 - 3, Ultra)** | CastOS | No Bluetooth hardware | Open | Unsupported | Cast V2 | Playback detection only |
+| **Third-Party Cast Soundbars** | Cast Linux | Returns 400 on scan request | Open | Unsupported | Cast V2 | Playback detection only; firmware omits scan routines |
+| **Cast Speaker Groups** | Virtual mDNS | None | Open (dynamic ports) | Unsupported | Cast V2 | Skipped; virtual group endpoint with no radio |
 
 ---
 
-## 🔍 Detailed Empirical Analysis
+## Device Details
 
-### 1. Google Home Mini (1st Gen, H0A) & Google Nest Mini (2nd Gen, H2C)
+### 1. Google Home & Nest Speakers (Home Mini, Nest Mini, Nest Audio, Home Max)
 
-Google Home Minis and Google Nest Minis represent the ideal hardware target for `ha-google-home-bt-proxy`.
+These speakers run minimal embedded Linux (CastOS) and support the local setup endpoints required for Bluetooth scanning:
 
-- **Operating System**: Minimal embedded Linux (CastOS).
-- **Network Stack**:
-  - `Port 8008`: HTTP setup and DIAL discovery.
-  - `Port 8009`: Cast V2 protocol over TLS (mandatory Google Cast control channel).
-  - `Port 8443`: Local Google Home HTTPS setup API (`https://<IP>:8443/setup/...`).
-- **Authentication Model**:
-  - The local setup API requires a secure per-device session header: `cast-local-authorization-token: <token>`.
-  - Unauthenticated requests to `/setup/bluetooth/*` immediately fail with `HTTP 401 Unauthorized`.
-  - Tokens are negotiated automatically from Google Cloud via the integration's master token exchange and cached locally.
+- **Ports**:
+  - `8008`: HTTP setup and DIAL discovery
+  - `8009`: Cast V2 control channel (TLS)
+  - `8443`: HTTPS setup API (`https://<IP>:8443/setup/...`)
+- **Authentication**:
+  - Requires the `cast-local-authorization-token` header.
+  - The integration requests tokens automatically and caches them locally.
 - **Bluetooth Subsystem**:
-  - BlueZ / vendor-adapted stack with active inquiry scanning exposed via `/setup/bluetooth/scan`.
-  - Inquiry scans populate the internal table read via `/setup/bluetooth/scan_results`.
-  - Empirical testing verifies full detection of iBeacon, BLE sensor advertisements, smartwatches, and tracker tags.
-- **Media Playback Detection**:
-  - Dual-layer detection: queries Cast V2 receiver/media status on port 8009 and Bluetooth A2DP sink status on port 8443 (`connected_devices`).
+  - `POST /setup/bluetooth/scan`: Starts an inquiry scan.
+  - `GET /setup/bluetooth/scan_results`: Returns discovered devices with MAC, RSSI, and name.
+- **Playback Detection**:
+  - Checks Cast V2 media state on port 8009 and Bluetooth A2DP audio connections on port 8443.
+
+### 2. Android TV & Google TV (NVIDIA SHIELD, Sony, TCL)
+
+- **Ports**: Ports 8008, 8009, and 8443 are open.
+- **Bluetooth Endpoints**: Returning `HTTP 404 Not Found` for `/setup/bluetooth/scan` because Bluetooth is handled by the Android operating system rather than the Cast web service.
+- **Integration Behavior**: The integration classifies these as playback-only devices and does not start scanning workers on them.
+
+### 3. Third-Party Cast Devices (Soundbars, AVRs)
+
+- **Ports**: Ports 8008, 8009, and 8443 are open.
+- **Bluetooth Endpoints**: Submitting `POST /setup/bluetooth/scan` returns `HTTP 400 Bad Request` because OEM firmware does not implement Google's inquiry scan handler.
+- **Integration Behavior**: Automatically flagged as unsupported for scanning and skipped during scanner initialization.
+
+### 4. Cast Speaker Groups
+
+- Virtual speaker groups appear in mDNS with model `"Google Cast Group"`.
+- Because these are software groups rather than physical hardware, the integration automatically filters them out.
 
 ---
 
-### 2. Android TV & Google TV Devices (NVIDIA SHIELD, Sony, TCL, Hisense)
+## Testing Hardware with `probe_speaker.py`
 
-Many home environments feature Android TV or Google TV devices alongside smart speakers.
-
-- **Port Inspection**:
-  - `Port 8008`: Open.
-  - `Port 8009`: Open (standard Cast V2 receiver).
-  - `Port 8443`: Open (`/setup/eureka_info` responds with cast build revision e.g. `3.72.446070`).
-- **Why Bluetooth Scanning Is Ineligible**:
-  - Probing `/setup/bluetooth/status` or `/setup/bluetooth/scan` on Android TV returns **`HTTP 404 Not Found`**.
-  - On Android TV, the Cast receiver is implemented as an Android application (`com.google.android.apps.mediashell`). The underlying Bluetooth hardware is controlled by Android OS's native Bluetooth stack (`com.android.bluetooth`) and exposed via Android Framework APIs, rather than the CastOS setup web daemon.
-- **Integration Behavior**:
-  - `ha-google-home-bt-proxy` detects that Android TV devices lack the `/setup/bluetooth/*` endpoints during device classification and automatically prevents worker allocation for them.
-  - They can still be used for standalone Cast V2 playback monitoring if needed.
-
----
-
-### 3. Third-Party Cast Receivers (Soundbars, AVRs, Smart Displays)
-
-Third-party devices licensed with "Chromecast built-in" (such as Samsung Soundbars, JBL Link speakers, Denon/Marantz HEOS, Pioneer AVRs) run OEM-modified Cast receiver implementations.
-
-- **Port Inspection**:
-  - `Port 8008`, `Port 8009`, and `Port 8443` are open.
-  - `/setup/eureka_info` returns valid firmware metadata.
-  - `/setup/bluetooth/status` may return `200 OK` unauthenticated, indicating idle audio state.
-- **Why Bluetooth Scanning Fails**:
-  - Submitting `POST /setup/bluetooth/scan` returns **`HTTP 400 Bad Request`**.
-  - The OEM firmware does not implement the active BLE inquiry scanning routines present in first-party Google Home firmware.
-- **Integration Behavior**:
-  - The integration flags OEM receivers as unsupported for BLE scanning and gracefully bypasses them.
-
----
-
-### 4. Cast Audio Groups (Virtual Multi-Room Endpoints)
-
-When speakers are combined into speaker groups in the Google Home app (e.g. *Whole Home*, *Main Floor*):
-- Cast groups advertise on the local network via mDNS (`_googlecast._tcp.local.`) on dynamic high ports (typically in the `32000-33000` range).
-- The `md` (model) field in the mDNS TXT record is explicitly set to `"Google Cast Group"`.
-- Because these are virtual software abstractions rather than physical hardware with Bluetooth radios, `ha-google-home-bt-proxy` filters out any device matching the `Google Cast Group` model signature during initial speaker classification.
-
----
-
-## 🛠️ Testing Your Hardware with `probe_speaker.py`
-
-You can test any device on your local network using the included command-line diagnostic tool:
+You can test any Cast device on your network using the CLI diagnostic probe:
 
 ```bash
-# Basic probe (checks eureka_info and open endpoints)
+# Basic probe: checks eureka_info and open endpoints
 uv run scripts/probe_speaker.py --host 192.168.1.110
 
-# Full hardware inquiry scan with local authorization token
+# Scan probe with token: tests active scanning
 uv run scripts/probe_speaker.py --host 192.168.1.110 --token "YOUR_LOCAL_TOKEN" --timeout 5 --check-cast
 ```
 
-### Interpreting Probe Output
+### Example Outputs
 
-The probe script evaluates endpoint status codes and outputs a definitive classification:
-
-#### Google Home / Nest Speaker (Fully Supported)
+#### Google Home / Nest Speaker (Supported)
 ```json
 {
   "eureka": { "name": "Office Speaker", "build_version": "3.78.540761" },
@@ -133,28 +101,11 @@ The probe script evaluates endpoint status codes and outputs a definitive classi
 }
 ```
 
-#### Third-Party Soundbar (Playback Only)
-```json
-{
-  "eureka": { "name": "Living Room Soundbar", "cast_build_revision": "1.52.272222" },
-  "status": { "audio_mode": 1, "connected_devices": [] },
-  "scan": { "status": 400 },
-  "results": [],
-  "cast_v2": { "open": true, "port": 8009 },
-  "classification": "Third-Party Cast Device: Cast V2 supported, active BLE scanning rejected (HTTP 400)."
-}
-```
-
 ---
 
-## 🎯 Best Practices for Deployment
+## Deployment Recommendations
 
-1. **Physical Placement**:
-   - Place Google Home Minis and Nest Minis centrally in each room, elevated from the floor (e.g. on shelves or tables) to minimize signal attenuation.
-2. **Scan Windows & Intervals**:
-   - Default: `scan_timeout: 5s`, `scan_interval: 10s`.
-   - For high-density tracker environments (Bermuda room-level triangulation), 5s scan duration with 10s interval provides the optimal balance of fresh advertisement updates and Wi-Fi stability.
-3. **Playback Mode Handling**:
-   - Keep `playback_mode` set to `"pause"` (default) to ensure that background BLE inquiry scans are paused while listening to music or podcasts, eliminating audio stuttering.
-4. **RF Calibration**:
-   - Because Nest Minis (Gen 2) have higher RF front-end sensitivity than Home Minis (Gen 1), apply an RSSI calibration offset (e.g. `-2 dBm` to `-4 dBm`) via per-speaker options to align signal readings across mixed generations.
+1. **Placement**: Place speakers centrally in rooms and elevated off the floor (such as on shelves or desks).
+2. **Scan Timing**: Defaults of 5-second scan duration and 10-second interval provide good balance between update frequency and Wi-Fi performance.
+3. **Playback Handling**: Keep playback handling enabled (`throttle` or `skip_ceiling`) so scans pause or slow down during media playback to prevent audio dropouts.
+4. **Calibration**: Use `rssi_offset` to calibrate signal levels across different speaker generations (e.g. Nest Mini vs Home Mini).
