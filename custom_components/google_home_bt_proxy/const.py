@@ -22,6 +22,7 @@ CONF_PLAYING_SCAN_TIMEOUT: Final = "playing_scan_timeout"
 CONF_PLAYING_SCAN_INTERVAL: Final = "playing_scan_interval"
 CONF_MAX_PLAYING_SKIP_DURATION: Final = "max_playing_skip_duration"
 CONF_RSSI_THRESHOLD: Final = "rssi_threshold"
+CONF_RSSI_OFFSET: Final = "rssi_offset"
 CONF_DISABLED_SPEAKERS: Final = "disabled_speakers"
 CONF_KNOWN_IRKS: Final = "known_irks"
 
@@ -38,6 +39,8 @@ DEFAULT_PLAYING_SCAN_TIMEOUT: Final = 2  # seconds for active scan during playba
 DEFAULT_PLAYING_SCAN_INTERVAL: Final = 30  # seconds between scans during playback
 DEFAULT_MAX_PLAYING_SKIP_DURATION: Final = 120  # seconds maximum continuous skip before forced scan
 DEFAULT_RSSI_THRESHOLD: Final = -90  # dBm
+DEFAULT_RSSI_OFFSET: Final = 0  # dBm calibration offset
+
 
 # API Constants
 PORT_HTTPS: Final = 8443

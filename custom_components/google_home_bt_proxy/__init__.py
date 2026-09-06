@@ -26,6 +26,7 @@ from .const import (
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
+    CONF_RSSI_OFFSET,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
@@ -34,6 +35,7 @@ from .const import (
     DEFAULT_PLAYBACK_MODE,
     DEFAULT_PLAYING_SCAN_INTERVAL,
     DEFAULT_PLAYING_SCAN_TIMEOUT,
+    DEFAULT_RSSI_OFFSET,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
@@ -88,11 +90,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unregister_callbacks: list[Callable[[], None]] = []
     worker_tasks: list[asyncio.Task[None]] = []
 
+    rssi_offset = entry.options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET)
     for index, speaker in enumerate(active_speakers):
         scanner = GoogleHomeRemoteScanner(
             scanner_id=f"google_home_{speaker.device_id}",
             name=f"{speaker.name} Bluetooth Proxy",
             irk_resolver=irk_resolver,
+            rssi_offset=rssi_offset,
         )
         scanners[speaker.device_id] = scanner
 
