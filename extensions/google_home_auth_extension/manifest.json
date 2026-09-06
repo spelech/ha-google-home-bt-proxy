@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Google Home Bluetooth Proxy Auth Helper",
+  "version": "1.0.0",
+  "description": "Automates capturing Google Home OAuth tokens and relaying them to Home Assistant.",
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://accounts.google.com/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Google Home Bluetooth Proxy Auth Helper"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
