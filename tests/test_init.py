@@ -170,6 +170,8 @@ async def test_speaker_scan_loop_normal_cycle():
         auth_token="token123",
     )
     mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
 
     loop_task = asyncio.create_task(
         _speaker_scan_loop(
@@ -180,6 +182,7 @@ async def test_speaker_scan_loop_normal_cycle():
             mock_speaker,
             mock_scanner,
             initial_delay=0.01,
+            playback_detector=mock_detector,
         )
     )
 
@@ -214,6 +217,8 @@ async def test_speaker_scan_loop_token_expired():
         auth_token="old-token",
     )
     mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
 
     with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
         # Stop loop after one sleep call in TokenExpiredError
@@ -228,6 +233,7 @@ async def test_speaker_scan_loop_token_expired():
                 mock_speaker,
                 mock_scanner,
                 initial_delay=0.0,
+                playback_detector=mock_detector,
             )
 
     mock_coord.async_refresh_token.assert_called_once_with(mock_speaker)
@@ -256,6 +262,8 @@ async def test_speaker_scan_loop_connection_error_and_generic_error():
         auth_token="test-token",
     )
     mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
 
     with patch("asyncio.sleep", AsyncMock()):
         with pytest.raises(asyncio.CancelledError):
@@ -267,6 +275,177 @@ async def test_speaker_scan_loop_connection_error_and_generic_error():
                 mock_speaker,
                 mock_scanner,
                 initial_delay=0.0,
+                playback_detector=mock_detector,
             )
 
     assert mock_api.start_scan.call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_playback_throttle():
+    """Verify scan loop throttles scan timeout and interval when playing."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_PLAYBACK_MODE,
+        CONF_PLAYING_SCAN_INTERVAL,
+        CONF_PLAYING_SCAN_TIMEOUT,
+        MODE_THROTTLE,
+    )
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_PLAYBACK_MODE: MODE_THROTTLE,
+        CONF_PLAYING_SCAN_TIMEOUT: 2,
+        CONF_PLAYING_SCAN_INTERVAL: 30,
+    }
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=True)
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        mock_sleep.side_effect = [None, None, asyncio.CancelledError()]
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+            )
+
+    # Started scan with playing timeout
+    mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=2)
+    # Slept for playing timeout and then playing interval
+    mock_sleep.assert_any_call(2)
+    mock_sleep.assert_any_call(30)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_playback_skip_ceiling():
+    """Verify skip ceiling skips scans until elapsed duration exceeds max ceiling."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_MAX_PLAYING_SKIP_DURATION,
+        CONF_PLAYBACK_MODE,
+        CONF_PLAYING_SCAN_TIMEOUT,
+        MODE_SKIP_CEILING,
+    )
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_PLAYBACK_MODE: MODE_SKIP_CEILING,
+        CONF_PLAYING_SCAN_TIMEOUT: 2,
+        CONF_MAX_PLAYING_SKIP_DURATION: 120,
+    }
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=True)
+
+    # Simulate two cycles: cycle 1 elapsed = 0s (skipped), cycle 2 elapsed = 130s (forced scan)
+    with (
+        patch("time.monotonic", side_effect=[100.0, 230.0, 230.0, 230.0]),
+        patch("asyncio.sleep", AsyncMock()) as mock_sleep,
+    ):
+        mock_sleep.side_effect = [None, None, None, asyncio.CancelledError()]
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+            )
+
+    # Forced scan was called on cycle 2 with playing timeout
+    mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=2)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_playback_ignore():
+    """Verify ignore mode scans with idle settings even when media is playing."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_PLAYBACK_MODE,
+        CONF_SCAN_INTERVAL,
+        CONF_SCAN_TIMEOUT,
+        MODE_IGNORE,
+    )
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_PLAYBACK_MODE: MODE_IGNORE,
+        CONF_SCAN_TIMEOUT: 5,
+        CONF_SCAN_INTERVAL: 10,
+    }
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=True)
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        mock_sleep.side_effect = [None, None, asyncio.CancelledError()]
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+            )
+
+    # detector.async_is_playing should NOT be called in ignore mode
+    mock_detector.async_is_playing.assert_not_called()
+    mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=5)
+    mock_sleep.assert_any_call(5)
+    mock_sleep.assert_any_call(10)
+
