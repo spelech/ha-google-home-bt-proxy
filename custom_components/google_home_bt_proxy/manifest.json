@@ -1,0 +1,15 @@
+{
+  "domain": "google_home_bt_proxy",
+  "name": "Google Home Bluetooth Proxy",
+  "codeowners": ["@spelech"],
+  "config_flow": true,
+  "documentation": "https://github.com/spelech/ha-google-home-bt-proxy",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [
+    "glocaltokens>=0.7.6",
+    "habluetooth>=3.8.0"
+  ],
+  "dependencies": ["bluetooth", "zeroconf"],
+  "version": "0.1.0"
+}

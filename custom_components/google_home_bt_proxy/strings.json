@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Google Home Authentication",
+        "description": "Provide your Google Account credentials or Master Token to authenticate with your speakers.",
+        "data": {
+          "username": "Username (Google Email)",
+          "password": "Password or App Password",
+          "master_token": "Master Token (Alternative to Password)",
+          "android_id": "Android ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect or retrieve authentication tokens.",
+      "invalid_auth": "Invalid credentials or master token."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Bluetooth Proxy Settings",
+        "data": {
+          "scan_timeout": "Hardware Scan Duration (seconds)",
+          "scan_interval": "Interval Between Scans (seconds)",
+          "rssi_threshold": "Minimum RSSI Threshold (dBm)"
+        }
+      }
+    }
+  }
+}
