@@ -83,3 +83,40 @@ def test_speaker_override_constants():
     assert CONF_SELECTED_SPEAKER == "selected_speaker"
     assert CONF_CUSTOM_SETTINGS == "custom_settings"
     assert GLOBAL_SETTINGS == "global"
+
+
+def test_rf_calibration_constants():
+    """Verify RF calibration constants and defaults."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_RSSI_OFFSET,
+        DEFAULT_RSSI_OFFSET,
+    )
+
+    assert CONF_RSSI_OFFSET == "rssi_offset"
+    assert DEFAULT_RSSI_OFFSET == 0
+
+
+def test_speaker_proxy_state_model():
+    """Verify SpeakerProxyState runtime model and callback dispatch."""
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    state = SpeakerProxyState()
+    assert state.status == "idle"
+    assert state.total_advertisements == 0
+    assert state.last_scan_count == 0
+    assert state.last_scan_duration == 0.0
+    assert state.last_scan_timestamp is None
+    assert state.enabled is True
+
+    called = []
+
+    def cb():
+        called.append(True)
+
+    unreg = state.register_callback(cb)
+    state.notify_callbacks()
+    assert len(called) == 1
+
+    unreg()
+    state.notify_callbacks()
+    assert len(called) == 1

@@ -166,6 +166,7 @@ async def test_options_flow_with_playback_settings():
         CONF_PLAYBACK_MODE,
         CONF_PLAYING_SCAN_INTERVAL,
         CONF_PLAYING_SCAN_TIMEOUT,
+        CONF_RSSI_OFFSET,
         MODE_SKIP_CEILING,
     )
 
@@ -181,6 +182,7 @@ async def test_options_flow_with_playback_settings():
     assert CONF_PLAYING_SCAN_TIMEOUT in schema_keys
     assert CONF_PLAYING_SCAN_INTERVAL in schema_keys
     assert CONF_MAX_PLAYING_SKIP_DURATION in schema_keys
+    assert CONF_RSSI_OFFSET in schema_keys
 
     # Submit form
     user_input = {
@@ -188,6 +190,7 @@ async def test_options_flow_with_playback_settings():
         CONF_PLAYING_SCAN_TIMEOUT: 3,
         CONF_PLAYING_SCAN_INTERVAL: 45,
         CONF_MAX_PLAYING_SKIP_DURATION: 180,
+        CONF_RSSI_OFFSET: 4,
     }
     create_result = await handler.async_step_init(user_input)
     assert create_result["type"] == "create_entry"
@@ -195,6 +198,7 @@ async def test_options_flow_with_playback_settings():
     assert create_result["data"][CONF_PLAYING_SCAN_TIMEOUT] == 3
     assert create_result["data"][CONF_PLAYING_SCAN_INTERVAL] == 45
     assert create_result["data"][CONF_MAX_PLAYING_SKIP_DURATION] == 180
+    assert create_result["data"][CONF_RSSI_OFFSET] == 4
 
 
 @pytest.mark.asyncio

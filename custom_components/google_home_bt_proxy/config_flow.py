@@ -26,6 +26,7 @@ from .const import (
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
+    CONF_RSSI_OFFSET,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
@@ -36,6 +37,7 @@ from .const import (
     DEFAULT_PLAYBACK_MODE,
     DEFAULT_PLAYING_SCAN_INTERVAL,
     DEFAULT_PLAYING_SCAN_TIMEOUT,
+    DEFAULT_RSSI_OFFSET,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
@@ -277,6 +279,10 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_RSSI_THRESHOLD,
                     default=options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),
                 ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-40)),
+                vol.Optional(
+                    CONF_RSSI_OFFSET,
+                    default=options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET),
+                ): vol.All(vol.Coerce(int), vol.Range(min=-30, max=30)),
                 vol.Optional(
                     CONF_KNOWN_IRKS,
                     default=options.get(CONF_KNOWN_IRKS, ""),

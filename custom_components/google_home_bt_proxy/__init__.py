@@ -10,6 +10,7 @@ from typing import Any
 
 from homeassistant.components import bluetooth, zeroconf
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -26,6 +27,7 @@ from .const import (
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
+    CONF_RSSI_OFFSET,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
@@ -35,6 +37,7 @@ from .const import (
     DEFAULT_PLAYBACK_MODE,
     DEFAULT_PLAYING_SCAN_INTERVAL,
     DEFAULT_PLAYING_SCAN_TIMEOUT,
+    DEFAULT_RSSI_OFFSET,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
@@ -45,11 +48,17 @@ from .const import (
 )
 from .coordinator import GoogleHomeProxyCoordinator
 from .irk import IrkResolver, parse_irk_config
-from .models import SpeakerNode
+from .models import SpeakerNode, SpeakerProxyState
 from .playback import SpeakerPlaybackDetector
 from .scanner import GoogleHomeRemoteScanner
 
 _LOGGER = logging.getLogger(__name__)
+
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.BUTTON,
+]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -86,16 +95,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     irk_resolver = IrkResolver(irk_map) if irk_map else None
 
     scanners: dict[str, GoogleHomeRemoteScanner] = {}
+    speakers_data: dict[str, dict[str, Any]] = {}
     unregister_callbacks: list[Callable[[], None]] = []
     worker_tasks: list[asyncio.Task[None]] = []
 
+    rssi_offset = entry.options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET)
     for index, speaker in enumerate(active_speakers):
         scanner = GoogleHomeRemoteScanner(
             scanner_id=f"google_home_{speaker.device_id}",
             name=f"{speaker.name} Bluetooth Proxy",
             irk_resolver=irk_resolver,
+            rssi_offset=rssi_offset,
         )
         scanners[speaker.device_id] = scanner
+        proxy_state = SpeakerProxyState(enabled=speaker.enabled)
+        speakers_data[speaker.device_id] = {
+            "speaker": speaker,
+            "state": proxy_state,
+            "scanner": scanner,
+        }
 
         unreg = bluetooth.async_register_scanner(
             hass,
@@ -118,6 +136,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 scanner,
                 stagger_delay,
                 playback_detector=playback_detector,
+                state=proxy_state,
             ),
             name=f"google_home_bt_proxy_{speaker.device_id}",
         )
@@ -128,9 +147,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "api_client": api_client,
         "playback_detector": playback_detector,
         "scanners": scanners,
+        "speakers": speakers_data,
         "unregister_callbacks": unregister_callbacks,
         "worker_tasks": worker_tasks,
     }
+
+    forward_setups = getattr(
+        getattr(hass, "config_entries", None), "async_forward_entry_setups", None
+    )
+    if forward_setups:
+        res = forward_setups(entry, PLATFORMS)
+        if asyncio.iscoroutine(res):
+            await res
 
     return True
 
@@ -157,18 +185,26 @@ async def _speaker_scan_loop(
     scanner: GoogleHomeRemoteScanner,
     initial_delay: float,
     playback_detector: SpeakerPlaybackDetector | None = None,
+    state: SpeakerProxyState | None = None,
 ) -> None:
     """Continuous staggered polling scan loop for an individual speaker."""
     if playback_detector is None:
         playback_detector = SpeakerPlaybackDetector(api_client)
+    if state is None:
+        state = SpeakerProxyState(enabled=speaker.enabled)
 
     await asyncio.sleep(initial_delay)
     _LOGGER.info("Starting Bluetooth scan worker loop for %s", speaker.name)
 
     backoff = 1.0
     continuous_skip_start: float | None = None
-
     while True:
+        if not state.enabled:
+            state.status = "disabled"
+            state.notify_callbacks()
+            await asyncio.sleep(1.0)
+            continue
+
         playback_mode = _get_speaker_setting(
             entry, speaker.device_id, CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE
         )
@@ -216,6 +252,7 @@ async def _speaker_scan_loop(
                 active_timeout = playing_scan_timeout
                 active_interval = playing_scan_interval
                 should_scan = True
+                state.status = "playback_throttled"
             elif playback_mode == MODE_SKIP_CEILING:
                 elapsed_skip = now - continuous_skip_start
                 if elapsed_skip >= max_skip_duration:
@@ -229,9 +266,12 @@ async def _speaker_scan_loop(
                     should_scan = True
                     active_timeout = playing_scan_timeout
                     continuous_skip_start = now
+                    state.status = "playback_throttled"
                 else:
                     should_scan = False
                     active_interval = idle_scan_interval
+                    state.status = "playback_skipped"
+            state.notify_callbacks()
         else:
             continuous_skip_start = None
             should_scan = True
@@ -240,6 +280,9 @@ async def _speaker_scan_loop(
 
         if should_scan:
             try:
+                state.status = "scanning"
+                state.notify_callbacks()
+
                 # 1. Trigger hardware scan
                 await api_client.start_scan(speaker, timeout=active_timeout)
 
@@ -253,6 +296,13 @@ async def _speaker_scan_loop(
                 scanner.process_scan_results(results, min_rssi=rssi_threshold)
                 backoff = 1.0
 
+                state.last_scan_count = len(results)
+                state.total_advertisements += len(results)
+                state.last_scan_duration = float(active_timeout)
+                state.last_scan_timestamp = time.time()
+                state.status = "idle"
+                state.notify_callbacks()
+
             except TokenExpiredError:
                 _LOGGER.warning("Auth token expired for %s, requesting refresh...", speaker.name)
                 await coordinator.async_refresh_token(speaker)
@@ -265,6 +315,8 @@ async def _speaker_scan_loop(
                     err,
                     backoff,
                 )
+                state.status = "unavailable"
+                state.notify_callbacks()
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2.0, 60.0)
                 continue
@@ -273,8 +325,16 @@ async def _speaker_scan_loop(
                 raise
             except Exception:
                 _LOGGER.exception("Unexpected error in scan loop for %s", speaker.name)
+                state.status = "unavailable"
+                state.notify_callbacks()
+        else:
+            state.notify_callbacks()
 
-        await asyncio.sleep(active_interval)
+        if state.trigger_scan_event.is_set():
+            state.trigger_scan_event.clear()
+            _LOGGER.debug("Immediate scan triggered via event for %s", speaker.name)
+        else:
+            await asyncio.sleep(active_interval)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -282,6 +342,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_data: dict[str, Any] | None = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not entry_data:
         return True
+
+    unload_platforms = getattr(
+        getattr(hass, "config_entries", None), "async_unload_platforms", None
+    )
+    if unload_platforms:
+        res = unload_platforms(entry, PLATFORMS)
+        if asyncio.iscoroutine(res):
+            unload_ok = await res
+        elif isinstance(res, bool):
+            unload_ok = res
+        else:
+            unload_ok = True
+    else:
+        unload_ok = True
 
     # Cancel scan worker tasks
     for task in entry_data.get("worker_tasks", []):
@@ -292,4 +366,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if callable(unreg):
             unreg()
 
-    return True
+    return unload_ok

@@ -119,3 +119,57 @@ def test_process_scan_results_enriched_metadata_and_irk():
     assert details["expected_profiles"] == 1
     assert details["is_rpa"] is True
     assert details["resolved_identity"] == "Steve Phone"
+
+
+def test_process_scan_results_rssi_offset_and_clamping():
+    """Verify RSSI calibration offset is applied and clamped properly."""
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="calibrated_scanner",
+        name="Calibrated Scanner",
+        rssi_offset=5,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    devices = [
+        DiscoveredDevice(mac_address="11:11:11:11:11:11", rssi=-75),  # -75 + 5 = -70
+        DiscoveredDevice(mac_address="22:22:22:22:22:22", rssi=-10),  # -10 + 5 = -5
+        DiscoveredDevice(
+            mac_address="33:33:33:33:33:33", rssi=-93
+        ),  # -93 + 5 = -88 (passes min_rssi -90)
+        DiscoveredDevice(
+            mac_address="44:44:44:44:44:44", rssi=-96
+        ),  # -96 + 5 = -91 (< min_rssi -90, filtered)
+    ]
+
+    injected = scanner.process_scan_results(devices, min_rssi=-90)
+    assert injected == 3
+
+    calls = scanner._async_on_advertisement.call_args_list
+    assert calls[0][1]["rssi"] == -70
+    assert calls[0][1]["details"]["raw_rssi"] == -75
+    assert calls[0][1]["details"]["rssi_offset"] == 5
+
+    assert calls[1][1]["rssi"] == -5
+    assert calls[2][1]["rssi"] == -88
+
+    # Test clamping limits
+    clamp_scanner = GoogleHomeRemoteScanner(
+        scanner_id="clamp_scanner",
+        name="Clamp Scanner",
+        rssi_offset=20,
+    )
+    clamp_scanner._async_on_advertisement = MagicMock()
+    clamp_scanner.process_scan_results([DiscoveredDevice(mac_address="55:55:55:55:55:55", rssi=-5)])
+    assert clamp_scanner._async_on_advertisement.call_args[1]["rssi"] == 0  # Clamped to 0
+
+    low_clamp_scanner = GoogleHomeRemoteScanner(
+        scanner_id="low_clamp",
+        name="Low Clamp",
+        rssi_offset=-30,
+    )
+    low_clamp_scanner._async_on_advertisement = MagicMock()
+    low_clamp_scanner.process_scan_results(
+        [DiscoveredDevice(mac_address="66:66:66:66:66:66", rssi=-120)],
+        min_rssi=-128,
+    )
+    assert low_clamp_scanner._async_on_advertisement.call_args[1]["rssi"] == -127  # Clamped to -127

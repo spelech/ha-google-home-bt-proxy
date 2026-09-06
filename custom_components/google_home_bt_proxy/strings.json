@@ -52,7 +52,9 @@
           "playing_scan_timeout": "Playback Scan Duration (seconds)",
           "playing_scan_interval": "Playback Scan Interval (seconds)",
           "max_playing_skip_duration": "Max Continuous Playback Skip Ceiling (seconds)",
-          "rssi_threshold": "Minimum RSSI Threshold (dBm)"
+          "rssi_threshold": "Minimum RSSI Threshold (dBm)",
+          "rssi_offset": "RSSI Calibration Offset (dBm, -30 to +30)",
+          "known_irks": "Known IRKs (Format: name:hex_key, one per line)"
         }
       }
     }
