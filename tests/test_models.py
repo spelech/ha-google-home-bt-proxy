@@ -1,4 +1,5 @@
 """Tests for models and constants."""
+
 from custom_components.google_home_bt_proxy.const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,

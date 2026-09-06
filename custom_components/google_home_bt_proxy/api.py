@@ -1,4 +1,5 @@
 """HTTPS API client for communicating with Google Home speakers on port 8443."""
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,9 @@ class GoogleHomeApiClient:
         }
 
     async def start_scan(
-        self, speaker: SpeakerNode, timeout: int = 5  # noqa: ASYNC109
+        self,
+        speaker: SpeakerNode,
+        timeout: int = 5,  # noqa: ASYNC109
     ) -> bool:
         """Trigger an inquiry Bluetooth scan on the speaker."""
         url = self._build_url(speaker.ip_address, ENDPOINT_BLUETOOTH_SCAN)
@@ -73,9 +76,7 @@ class GoogleHomeApiClient:
                 if resp.status == 200:
                     speaker.available = True
                     return True
-                _LOGGER.warning(
-                    "Failed to start scan on %s: HTTP %d", speaker.name, resp.status
-                )
+                _LOGGER.warning("Failed to start scan on %s: HTTP %d", speaker.name, resp.status)
                 return False
         except (aiohttp.ClientError, TimeoutError) as err:
             speaker.available = False

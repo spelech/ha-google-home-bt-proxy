@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Empirical hardware probe script for Google Home Bluetooth endpoints."""
+
 from __future__ import annotations
 
 import argparse
@@ -31,12 +32,8 @@ async def probe_endpoints(
 
     # 1. Eureka Info
     try:
-        async with session.get(
-            f"{base_url}/setup/eureka_info", headers=headers, ssl=False
-        ) as resp:
-            results["eureka"] = (
-                await resp.json() if resp.status == 200 else {"status": resp.status}
-            )
+        async with session.get(f"{base_url}/setup/eureka_info", headers=headers, ssl=False) as resp:
+            results["eureka"] = await resp.json() if resp.status == 200 else {"status": resp.status}
     except Exception as err:
         results["eureka"] = {"error": str(err)}
 
@@ -45,9 +42,7 @@ async def probe_endpoints(
         async with session.get(
             f"{base_url}/setup/bluetooth/status", headers=headers, ssl=False
         ) as resp:
-            results["status"] = (
-                await resp.json() if resp.status == 200 else {"status": resp.status}
-            )
+            results["status"] = await resp.json() if resp.status == 200 else {"status": resp.status}
     except Exception as err:
         results["status"] = {"error": str(err)}
 
@@ -60,9 +55,7 @@ async def probe_endpoints(
             json=scan_payload,
             ssl=False,
         ) as resp:
-            results["scan"] = (
-                await resp.json() if resp.status == 200 else {"status": resp.status}
-            )
+            results["scan"] = await resp.json() if resp.status == 200 else {"status": resp.status}
     except Exception as err:
         results["scan"] = {"error": str(err)}
 

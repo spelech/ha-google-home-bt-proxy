@@ -1,0 +1,52 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  gate1_integrity:
+    name: Gate 1 - Manifest & Link Integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest.json schema
+        run: |
+          python3 -c "import json; m = json.load(open('custom_components/google_home_bt_proxy/manifest.json')); assert m['domain'] == 'google_home_bt_proxy'"
+
+  gate2_lint_format:
+    name: Gate 2 - Ruff Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Run Ruff Lint
+        run: uv run ruff check .
+      - name: Run Ruff Format Check
+        run: uv run ruff format --check .
+
+  gate3_tests_coverage:
+    name: Gate 3 - Pytest & Coverage (>= 80%)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Run Test Suite
+        run: uv run pytest --cov=custom_components/google_home_bt_proxy --cov-fail-under=80 -v
+
+  gate4_security:
+    name: Gate 4 - Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3

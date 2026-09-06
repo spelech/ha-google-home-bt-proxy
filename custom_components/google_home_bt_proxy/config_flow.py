@@ -1,4 +1,5 @@
 """Config flow and options flow for Google Home Bluetooth Proxy."""
+
 from __future__ import annotations
 
 import logging

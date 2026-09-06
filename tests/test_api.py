@@ -1,4 +1,5 @@
 """Tests for GoogleHomeApiClient."""
+
 from __future__ import annotations
 
 import aiohttp
@@ -28,22 +29,24 @@ async def test_start_scan_and_get_results(aiohttp_client) -> None:
 
     async def handle_results(request: web.Request) -> web.Response:
         assert request.headers.get("cast-local-authorization-token") == "test-token"
-        return web.json_response([
-            {
-                "mac_address": "11:22:33:44:55:66",
-                "rssi": -68,
-                "name": "SmartBand",
-                "device_type": 1,
-            },
-            {
-                "mac_address": "AA:BB:CC:DD:EE:FF",
-                "rssi": -85,
-                "name": "Beacon2",
-                "device_type": 2,
-            },
-            {"mac_address": None, "rssi": -50},  # Missing mac
-            {"mac_address": "12:34:56:78:90:AB", "rssi": None},  # Missing rssi
-        ])
+        return web.json_response(
+            [
+                {
+                    "mac_address": "11:22:33:44:55:66",
+                    "rssi": -68,
+                    "name": "SmartBand",
+                    "device_type": 1,
+                },
+                {
+                    "mac_address": "AA:BB:CC:DD:EE:FF",
+                    "rssi": -85,
+                    "name": "Beacon2",
+                    "device_type": 2,
+                },
+                {"mac_address": None, "rssi": -50},  # Missing mac
+                {"mac_address": "12:34:56:78:90:AB", "rssi": None},  # Missing rssi
+            ]
+        )
 
     app = web.Application()
     app.router.add_post("/setup/bluetooth/scan", handle_scan)
@@ -76,6 +79,7 @@ async def test_start_scan_and_get_results(aiohttp_client) -> None:
 @pytest.mark.asyncio
 async def test_start_scan_non_200(aiohttp_client) -> None:
     """Verify start_scan handles non-200 HTTP status properly."""
+
     async def handle_scan(request: web.Request) -> web.Response:
         return web.Response(status=500)
 
@@ -99,6 +103,7 @@ async def test_start_scan_non_200(aiohttp_client) -> None:
 @pytest.mark.asyncio
 async def test_get_scan_results_non_200(aiohttp_client) -> None:
     """Verify get_scan_results returns empty list on non-200."""
+
     async def handle_results(request: web.Request) -> web.Response:
         return web.Response(status=500)
 
@@ -122,6 +127,7 @@ async def test_get_scan_results_non_200(aiohttp_client) -> None:
 @pytest.mark.asyncio
 async def test_token_expired_error(aiohttp_client) -> None:
     """Verify TokenExpiredError is raised on 401."""
+
     async def handle_unauthorized(request: web.Request) -> web.Response:
         return web.Response(status=401)
 
@@ -181,6 +187,7 @@ async def test_get_device_info_success_and_non_200(aiohttp_client) -> None:
 @pytest.mark.asyncio
 async def test_get_device_info_non_200(aiohttp_client) -> None:
     """Verify get_device_info returns empty dict on non-200."""
+
     async def handle_eureka(request: web.Request) -> web.Response:
         return web.Response(status=500)
 

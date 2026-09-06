@@ -1,4 +1,5 @@
 """Tests for config_flow."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

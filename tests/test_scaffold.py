@@ -1,4 +1,5 @@
 """Scaffolding smoke test."""
+
 import pathlib
 
 

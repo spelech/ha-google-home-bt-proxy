@@ -1,4 +1,5 @@
 """Tests for __init__.py lifecycle."""
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -159,9 +160,7 @@ async def test_speaker_scan_loop_normal_cycle():
 
     mock_api = MagicMock()
     mock_api.start_scan = AsyncMock(return_value=True)
-    discovered = [
-        DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-70, name="BLE Beacon")
-    ]
+    discovered = [DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-70, name="BLE Beacon")]
     mock_api.get_scan_results = AsyncMock(return_value=discovered)
 
     mock_speaker = SpeakerNode(
