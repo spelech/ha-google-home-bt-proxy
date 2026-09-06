@@ -29,6 +29,7 @@ from .const import (
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
+    CONF_SPEAKER_OVERRIDES,
     CONF_USERNAME,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
     DEFAULT_PLAYBACK_MODE,
@@ -134,6 +135,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _get_speaker_setting(
+    entry: ConfigEntry,
+    speaker_id: str,
+    key: str,
+    default: Any,
+) -> Any:
+    """Resolve a setting for a specific speaker, falling back to global options."""
+    overrides = entry.options.get(CONF_SPEAKER_OVERRIDES, {}).get(speaker_id, {})
+    if key in overrides and overrides[key] is not None:
+        return overrides[key]
+    return entry.options.get(key, default)
+
+
 async def _speaker_scan_loop(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -155,19 +169,30 @@ async def _speaker_scan_loop(
     continuous_skip_start: float | None = None
 
     while True:
-        playback_mode = entry.options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE)
-        idle_scan_timeout = entry.options.get(CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT)
-        idle_scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        playing_scan_timeout = entry.options.get(
-            CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT
+        playback_mode = _get_speaker_setting(
+            entry, speaker.device_id, CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE
         )
-        playing_scan_interval = entry.options.get(
-            CONF_PLAYING_SCAN_INTERVAL, DEFAULT_PLAYING_SCAN_INTERVAL
+        idle_scan_timeout = _get_speaker_setting(
+            entry, speaker.device_id, CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT
         )
-        max_skip_duration = entry.options.get(
-            CONF_MAX_PLAYING_SKIP_DURATION, DEFAULT_MAX_PLAYING_SKIP_DURATION
+        idle_scan_interval = _get_speaker_setting(
+            entry, speaker.device_id, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         )
-        rssi_threshold = entry.options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD)
+        playing_scan_timeout = _get_speaker_setting(
+            entry, speaker.device_id, CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT
+        )
+        playing_scan_interval = _get_speaker_setting(
+            entry, speaker.device_id, CONF_PLAYING_SCAN_INTERVAL, DEFAULT_PLAYING_SCAN_INTERVAL
+        )
+        max_skip_duration = _get_speaker_setting(
+            entry,
+            speaker.device_id,
+            CONF_MAX_PLAYING_SKIP_DURATION,
+            DEFAULT_MAX_PLAYING_SKIP_DURATION,
+        )
+        rssi_threshold = _get_speaker_setting(
+            entry, speaker.device_id, CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD
+        )
 
         is_playing = False
         if playback_mode != MODE_IGNORE:

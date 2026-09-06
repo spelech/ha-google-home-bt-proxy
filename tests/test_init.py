@@ -448,3 +448,91 @@ async def test_speaker_scan_loop_playback_ignore():
     mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=5)
     mock_sleep.assert_any_call(5)
     mock_sleep.assert_any_call(10)
+
+
+def test_get_speaker_setting_resolution():
+    """Verify _get_speaker_setting resolves speaker overrides or falls back to global."""
+    from custom_components.google_home_bt_proxy import _get_speaker_setting
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_SCAN_INTERVAL,
+        CONF_SCAN_TIMEOUT,
+        CONF_SPEAKER_OVERRIDES,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_SCAN_INTERVAL: 15,
+        CONF_SCAN_TIMEOUT: 5,
+        CONF_SPEAKER_OVERRIDES: {
+            "spk-custom": {
+                CONF_SCAN_INTERVAL: 45,
+            }
+        },
+    }
+
+    # spk-custom has interval override 45, but no timeout override (falls back to 5)
+    assert _get_speaker_setting(mock_entry, "spk-custom", CONF_SCAN_INTERVAL, 10) == 45
+    assert _get_speaker_setting(mock_entry, "spk-custom", CONF_SCAN_TIMEOUT, 10) == 5
+
+    # spk-other has no overrides, falls back to global
+    assert _get_speaker_setting(mock_entry, "spk-other", CONF_SCAN_INTERVAL, 10) == 15
+    assert _get_speaker_setting(mock_entry, "spk-other", "non_existent_key", 99) == 99
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_with_per_speaker_overrides():
+    """Verify scan loop utilizes per-speaker overrides over global settings."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_SCAN_INTERVAL,
+        CONF_SCAN_TIMEOUT,
+        CONF_SPEAKER_OVERRIDES,
+    )
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_SCAN_INTERVAL: 10,
+        CONF_SCAN_TIMEOUT: 5,
+        CONF_SPEAKER_OVERRIDES: {
+            "spk-override": {
+                CONF_SCAN_INTERVAL: 25,
+                CONF_SCAN_TIMEOUT: 3,
+            }
+        },
+    }
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-override",
+        name="Overridden Speaker",
+        ip_address="192.168.1.150",
+        auth_token="auth-ovr",
+    )
+    mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        mock_sleep.side_effect = [None, None, asyncio.CancelledError()]
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+            )
+
+    # Uses overridden timeout (3 instead of 5)
+    mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=3)
+    # Uses overridden interval (25 instead of 10)
+    mock_sleep.assert_any_call(3)
+    mock_sleep.assert_any_call(25)

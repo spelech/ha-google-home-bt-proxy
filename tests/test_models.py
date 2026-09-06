@@ -68,3 +68,18 @@ def test_playback_constants():
     assert DEFAULT_PLAYING_SCAN_TIMEOUT == 2
     assert DEFAULT_PLAYING_SCAN_INTERVAL == 30
     assert DEFAULT_MAX_PLAYING_SKIP_DURATION == 120
+
+
+def test_speaker_override_constants():
+    """Verify constants for hierarchical per-speaker configuration."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_CUSTOM_SETTINGS,
+        CONF_SELECTED_SPEAKER,
+        CONF_SPEAKER_OVERRIDES,
+        GLOBAL_SETTINGS,
+    )
+
+    assert CONF_SPEAKER_OVERRIDES == "speaker_overrides"
+    assert CONF_SELECTED_SPEAKER == "selected_speaker"
+    assert CONF_CUSTOM_SETTINGS == "custom_settings"
+    assert GLOBAL_SETTINGS == "global"
