@@ -65,3 +65,57 @@ def test_process_scan_results_empty_and_all_filtered():
     ]
     assert scanner.process_scan_results(weak_devices, min_rssi=-90) == 0
     scanner._async_on_advertisement.assert_not_called()
+
+
+def test_process_scan_results_enriched_metadata_and_irk():
+    """Verify enriched fields and IRK resolution in process_scan_results."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    from custom_components.google_home_bt_proxy.irk import IrkResolver
+
+    irk_hex = "0123456789abcdef0123456789abcdef"
+    irk_bytes = bytes.fromhex(irk_hex)
+    resolver = IrkResolver({irk_hex: "Steve Phone"})
+
+    # Cryptographically valid RPA for irk_bytes
+    prand = bytes([0x41, 0x22, 0x33])
+    pt = b"\x00" * 13 + prand
+    encryptor = Cipher(algorithms.AES(irk_bytes), modes.ECB()).encryptor()
+    ct = encryptor.update(pt) + encryptor.finalize()
+    rpa_mac = ":".join(f"{b:02x}" for b in (prand + ct[13:]))
+
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="test_scanner",
+        name="Test Scanner",
+        irk_resolver=resolver,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    device = DiscoveredDevice(
+        mac_address=rpa_mac,
+        rssi=-70,
+        name=None,  # Unadvertised name -> should fallback to resolved identity
+        device_type=2,
+        device_class=2884640,
+        device_class_name="Audio/Video (TV)",
+        expected_profiles=1,
+        is_rpa=True,
+    )
+
+    scanner.process_scan_results([device], min_rssi=-90)
+
+    scanner._async_on_advertisement.assert_called_once()
+    call_args = scanner._async_on_advertisement.call_args[1]
+
+    # Verify raw address is preserved for HA/Bermuda precedence
+    assert call_args["address"] == rpa_mac
+    assert call_args["rssi"] == -70
+    assert call_args["local_name"] == "Steve Phone"
+
+    details = call_args["details"]
+    assert details["device_type"] == 2
+    assert details["device_class"] == 2884640
+    assert details["device_class_name"] == "Audio/Video (TV)"
+    assert details["expected_profiles"] == 1
+    assert details["is_rpa"] is True
+    assert details["resolved_identity"] == "Steve Phone"

@@ -7,6 +7,7 @@ from typing import Any
 
 import aiohttp
 
+from .classification import decode_device_class, is_resolvable_private_address
 from .const import (
     ENDPOINT_BLUETOOTH_SCAN,
     ENDPOINT_BLUETOOTH_SCAN_RESULTS,
@@ -69,7 +70,7 @@ class GoogleHomeApiClient:
                 json=payload,
                 headers=self._headers(speaker.auth_token),
                 timeout=self._timeout,
-                ssl=False if self._use_ssl else None,
+                ssl=False,
             ) as resp:
                 if resp.status == 401:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
@@ -91,7 +92,7 @@ class GoogleHomeApiClient:
                 url,
                 headers=self._headers(speaker.auth_token),
                 timeout=self._timeout,
-                ssl=False if self._use_ssl else None,
+                ssl=False,
             ) as resp:
                 if resp.status == 401:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
@@ -103,12 +104,17 @@ class GoogleHomeApiClient:
                         mac = item.get("mac_address")
                         rssi = item.get("rssi")
                         if mac and rssi is not None:
+                            dev_class = item.get("device_class")
                             results.append(
                                 DiscoveredDevice(
                                     mac_address=mac,
                                     rssi=int(rssi),
                                     name=item.get("name"),
                                     device_type=item.get("device_type"),
+                                    device_class=dev_class,
+                                    device_class_name=decode_device_class(dev_class),
+                                    expected_profiles=item.get("expected_profiles"),
+                                    is_rpa=is_resolvable_private_address(mac),
                                 )
                             )
                     return results
@@ -130,7 +136,7 @@ class GoogleHomeApiClient:
                 url,
                 headers=self._headers(speaker.auth_token),
                 timeout=self._timeout,
-                ssl=False if self._use_ssl else None,
+                ssl=False,
             ) as resp:
                 if resp.status == 401:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")

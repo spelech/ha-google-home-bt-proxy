@@ -26,4 +26,8 @@ class DiscoveredDevice:
     rssi: int
     name: str | None = None
     device_type: int | None = None
+    device_class: int | None = None
+    device_class_name: str | None = None
+    expected_profiles: int | None = None
+    is_rpa: bool = False
     service_uuids: list[str] = field(default_factory=list)

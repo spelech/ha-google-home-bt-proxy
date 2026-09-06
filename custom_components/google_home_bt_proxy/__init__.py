@@ -16,6 +16,7 @@ from .api import GoogleHomeApiClient, SpeakerConnectionError, TokenExpiredError
 from .const import (
     CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
+    CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_PASSWORD,
     CONF_RSSI_THRESHOLD,
@@ -28,6 +29,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import GoogleHomeProxyCoordinator
+from .irk import IrkResolver, parse_irk_config
 from .models import SpeakerNode
 from .scanner import GoogleHomeRemoteScanner
 
@@ -56,6 +58,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     disabled_speakers: list[str] = entry.options.get(CONF_DISABLED_SPEAKERS, [])
     active_speakers = [s for s in speakers if s.device_id not in disabled_speakers]
 
+    irk_config_text = entry.options.get(CONF_KNOWN_IRKS, "")
+    irk_map = parse_irk_config(irk_config_text)
+    irk_resolver = IrkResolver(irk_map) if irk_map else None
+
     scanners: dict[str, GoogleHomeRemoteScanner] = {}
     unregister_callbacks: list[Callable[[], None]] = []
     worker_tasks: list[asyncio.Task[None]] = []
@@ -64,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         scanner = GoogleHomeRemoteScanner(
             scanner_id=f"google_home_{speaker.device_id}",
             name=f"{speaker.name} Bluetooth Proxy",
+            irk_resolver=irk_resolver,
         )
         scanners[speaker.device_id] = scanner
 

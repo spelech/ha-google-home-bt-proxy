@@ -8,11 +8,12 @@ from typing import Any
 import voluptuous as vol
 from glocaltokens.client import GLocalAuthenticationTokens
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
     CONF_ANDROID_ID,
+    CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_PASSWORD,
     CONF_RSSI_THRESHOLD,
@@ -48,7 +49,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         token = await self.hass.async_add_executor_job(client.get_master_token)
         return bool(token)
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
 
@@ -77,15 +78,16 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
-        """Return options flow handler."""
+    ) -> GoogleHomeBtProxyOptionsFlowHandler:
+        """Get the options flow handler."""
         return GoogleHomeBtProxyOptionsFlowHandler(config_entry)
 
 
 class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options for Google Home Bluetooth Proxy."""
+    """Handle options flow for Google Home Bluetooth Proxy."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
         self._config_entry = config_entry
 
     @property
@@ -95,7 +97,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
             return self._config_entry
         return super().config_entry
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
@@ -115,6 +117,10 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_RSSI_THRESHOLD,
                     default=options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),
                 ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-40)),
+                vol.Optional(
+                    CONF_KNOWN_IRKS,
+                    default=options.get(CONF_KNOWN_IRKS, ""),
+                ): str,
             }
         )
 

@@ -18,6 +18,7 @@ CONF_SCAN_TIMEOUT: Final = "scan_timeout"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_RSSI_THRESHOLD: Final = "rssi_threshold"
 CONF_DISABLED_SPEAKERS: Final = "disabled_speakers"
+CONF_KNOWN_IRKS: Final = "known_irks"
 
 # Defaults
 DEFAULT_SCAN_TIMEOUT: Final = 5  # seconds for active scan
