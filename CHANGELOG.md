@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-06
+
+### Added
+- **Operational Diagnostics & Control Entities**:
+  - `sensor.*_bluetooth_proxy_status`: Live scanning lifecycle state (`idle`, `scanning`, `disabled`, `playback_paused`, `playback_throttled`) with packet counter, scan duration, and detected device count attributes.
+  - `switch.*_bluetooth_proxy`: Interactive switch entity to enable or disable Bluetooth proxy inquiry scanning per speaker.
+  - `button.*_trigger_bluetooth_scan`: Interactive button entity to immediately trigger an on-demand hardware inquiry scan.
+- **Bermuda BLE Optimization & RF Calibration**:
+  - Hardware-level `rssi_offset` calibration option applied directly to discovered advertisements before injection into Home Assistant's Bluetooth framework.
+  - Clamping to `[-127, 0]` dBm range with `raw_rssi` and `rssi_offset` metadata preserved in advertisement details.
+  - Comprehensive guide: `docs/bermuda_calibration.md`.
+- **Per-Speaker Configuration Granularity**:
+  - Hierarchical options flow allowing customization of individual speakers or global defaults.
+  - Configurable scan intervals, timeouts, playback modes, throttle intervals, and RF offsets per speaker.
+  - Granular overrides persisted in config entry options with automatic worker loop resolution.
+- **Hardware Compatibility Matrix & Diagnostic Enhancements**:
+  - Comprehensive documentation in `docs/hardware_matrix.md` cataloging empirical behavior across Google Home Minis, Nest Minis, Android TVs / Google TVs, and third-party Cast receivers.
+  - Diagnostic CLI `scripts/probe_speaker.py` enhanced with optional tokens, Cast V2 control socket verification (`--check-cast`), and automated hardware classification.
+
 ## [0.2.0] - 2026-09-06
 
 ### Added

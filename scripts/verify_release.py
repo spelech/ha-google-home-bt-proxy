@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import tomllib
@@ -59,29 +60,30 @@ def check_markdown_links(root_dir: Path) -> bool:
     """Verify all relative markdown links point to existing files."""
     print("🔍 Checking markdown relative links...")
     has_errors = False
-    for md_file in root_dir.glob("**/*.md"):
-        if any(
-            part.startswith(".") or part in ["node_modules", "bin", "obj", ".venv"]
-            for part in md_file.parts
-        ):
-            continue
-        content = md_file.read_text(encoding="utf-8", errors="ignore")
-        links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
-        for text, link in links:
-            if (
-                link.startswith("http://")
-                or link.startswith("https://")
-                or link.startswith("#")
-                or link.startswith("mailto:")
-            ):
+    excluded = {".venv", ".git", "node_modules", "bin", "obj", ".system_generated"}
+    for root, dirs, files in os.walk(root_dir):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in excluded]
+        for file in files:
+            if not file.endswith(".md"):
                 continue
-            target_path = link.split("#")[0]
-            if not target_path:
-                continue
-            resolved = (md_file.parent / target_path).resolve()
-            if not resolved.exists():
-                print(f"❌ Broken link in {md_file.relative_to(root_dir)}: [{text}]({link})")
-                has_errors = True
+            md_file = Path(root) / file
+            content = md_file.read_text(encoding="utf-8", errors="ignore")
+            links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
+            for text, link in links:
+                if (
+                    link.startswith("http://")
+                    or link.startswith("https://")
+                    or link.startswith("#")
+                    or link.startswith("mailto:")
+                ):
+                    continue
+                target_path = link.split("#")[0]
+                if not target_path:
+                    continue
+                resolved = (md_file.parent / target_path).resolve()
+                if not resolved.exists():
+                    print(f"❌ Broken link in {md_file.relative_to(root_dir)}: [{text}]({link})")
+                    has_errors = True
 
     if not has_errors:
         print("✅ All markdown links verified successfully.")
