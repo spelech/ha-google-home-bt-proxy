@@ -169,6 +169,9 @@ async def test_scan_loop_closed_loop_token_refresh(aiohttp_client) -> None:
     async def fast_sleep(delay: float) -> None:
         await real_sleep(min(delay, 0.01))
 
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
     with patch("asyncio.sleep", side_effect=fast_sleep):
         loop_task = asyncio.create_task(
             _speaker_scan_loop(
@@ -179,6 +182,7 @@ async def test_scan_loop_closed_loop_token_refresh(aiohttp_client) -> None:
                 speaker,
                 scanner,
                 initial_delay=0.0,
+                playback_detector=mock_detector,
             )
         )
 
