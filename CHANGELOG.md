@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-06
+
+### Added
+- **Signal Processing & RSSI Smoothing**:
+  - Rolling median and exponential moving average (EMA) filters to reduce RSSI fluctuations.
+  - Configurable window sizes and 60-second sample age expiration.
+  - Independent toggle (`enable_rssi_smoothing`) to forward raw calibrated RSSI without buffering.
+- **Distance Estimation & Boundary Gating**:
+  - Real-time distance calculation in meters using a log-distance path loss formula ($d = 10^{\frac{\text{ref\_power} - \text{RSSI}}{10 \times n}}$).
+  - Configurable reference power (`ref_power`) and path loss exponent (`path_loss_exponent`).
+  - Boundary cutoff threshold (`max_distance`) to drop distant or cross-floor advertisements.
+  - Independent toggle (`enable_distance_estimation`) to bypass distance calculations.
+- **Target Filtering & Ephemeral Address Suppression**:
+  - Three filtering modes: `all`, `known_only` (named or IRK-resolved devices), and `whitelist`.
+  - Whitelist support for exact MAC addresses, OUI/MAC prefixes, and name substrings.
+- **Multi-Speaker Scan Orchestrator**:
+  - Synchronized round-robin inquiry scan serialization to eliminate 2.4GHz Wi-Fi and Bluetooth interference across multi-speaker setups.
+  - Configurable `independent` mode for single-speaker or uncoordinated deployments.
+- **Diagnostics & Observability**:
+  - `sensor.*_bluetooth_advertisements_filtered`: Real-time counter of suppressed advertisements per speaker.
+  - Preserved signal processing details (`raw_rssi`, `calibrated_rssi`, `filtered_rssi`, `estimated_distance`, `samples_count`) in advertisement metadata.
+- **Documentation & Usability**:
+  - Technical guide in `docs/signal_processing.md`.
+  - Thorough documentation review for plain, concise English across all guides.
+
 ## [0.3.0] - 2026-09-06
 
 ### Added
