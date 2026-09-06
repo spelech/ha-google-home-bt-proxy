@@ -20,10 +20,32 @@
 ## 🎯 Features
 
 - **Native Bluetooth Remote Scanner**: Implements `habluetooth.BaseHaRemoteScanner` to inject discovered Bluetooth advertisements directly into Home Assistant's native Bluetooth Manager.
-- **Bermuda BLE Ready**: Injects live RSSI signal readings and source hardware MACs so [Bermuda BLE Trilateration](https://github.com/agittins/bermuda) can compute room presence and proximity without dedicated ESP32s.
+- **Bermuda BLE Ready & RF Calibration**: Injects live RSSI signal readings and source hardware MACs for [Bermuda BLE Trilateration](https://github.com/agittins/bermuda) room presence tracking, complete with hardware-level RSSI calibration offsets (`rssi_offset`).
+- **Autonomous Playback Protection**: Direct, standalone Cast V2 and Bluetooth A2DP audio streaming detection that automatically pauses or throttles BLE inquiry scans during active playback without coupling to Home Assistant's `media_player` entities.
+- **Hierarchical Per-Speaker Overrides**: Customize scan intervals, scan timeouts, playback modes, and RF offsets per speaker or fall back to global entry defaults.
+- **Operational Diagnostics & Controls**: First-class Home Assistant entities per speaker:
+  - `sensor.*_bluetooth_proxy_status`: Live scanning lifecycle state and packet counter attributes.
+  - `switch.*_bluetooth_proxy`: Instantly enable or disable scanning on individual speakers.
+  - `button.*_trigger_bluetooth_scan`: Manually trigger an on-demand hardware inquiry scan.
 - **Self-Healing Connection**: Automatically handles Google local authorization token renewal via `glocaltokens` and recovers from temporary Wi-Fi drops with exponential backoff.
 - **Staggered Polling**: Scans across multiple speakers are offset to minimize network spikes and maintain local speaker responsiveness.
-- **Empirical Diagnostic Probe**: Includes `scripts/probe_speaker.py` for testing and verifying speaker endpoints (`/setup/bluetooth/scan`, `/setup/bluetooth/scan_results`) from the command line.
+- **Empirical Diagnostic Probe**: Includes `scripts/probe_speaker.py` for testing, classifying, and verifying speaker endpoints (`/setup/bluetooth/scan`, `/setup/bluetooth/scan_results`, Cast V2 socket) from the command line.
+
+---
+
+## 📱 Hardware Compatibility Matrix
+
+For an exhaustive hardware breakdown, see the complete [Hardware Compatibility Matrix](docs/hardware_matrix.md).
+
+| Hardware Device | Subsystem / OS | BLE Proxy | Playback Detection | Role & Status |
+| :--- | :--- | :---: | :---: | :--- |
+| **Google Home Mini** (1st Gen) | CastOS / ARMv7 | ✅ Full | ✅ Cast V2 + A2DP | **Recommended**: High performance distributed scanner |
+| **Google Nest Mini** (2nd Gen) | CastOS / ARMv8 | ✅ Full | ✅ Cast V2 + A2DP | **Recommended**: Sensitive RF front-end |
+| **Google Home / Home Max / Nest Audio**| CastOS / ARMv7/v8 | ✅ Full | ✅ Cast V2 + A2DP | **Fully Supported**: Full setup API and BLE scanner |
+| **Google Nest Hub / Hub Max** | Fuchsia / CastOS | ⚠️ Partial | ✅ Cast V2 | **Notice**: Display radios prioritize Zigbee/Thread time-slicing |
+| **Android TV / Google TV (SHIELD, Smart TVs)** | Android TV OS | ❌ Ineligible | ✅ Cast V2 | **Playback-Only**: Bluetooth managed by Android OS (Port 8443 returns 404) |
+| **Third-Party Cast Soundbars** | OEM Cast Linux | ❌ Ineligible | ✅ Cast V2 | **Playback-Only**: Firmware rejects scan commands with 400 Bad Request |
+| **Google Cast Groups** | Virtual mDNS | ❌ Ineligible | ✅ Cast V2 | **Filtered**: Automatically skipped (no physical radio) |
 
 ---
 
@@ -52,16 +74,20 @@ Restart Home Assistant.
 1. In the Home Assistant UI, go to **Settings** > **Devices & Services** > **Add Integration**.
 2. Search for **Google Home Bluetooth Proxy**.
 3. Provide your Google Account credentials:
-   - **Recommended**: Provide your Google **Master Token** (`oauth2_rt_...`) and **Android ID**.
+   - **Recommended**: Provide your Google **Master Token** (`oauth2_rt_...`) and **Android ID** (or use the companion browser extension).
    - **Alternative**: Enter your Google account email and an App Password.
 4. Once authenticated, the integration discovers all Google Home and Nest speakers on your local network and registers a Bluetooth scanner proxy for each enabled speaker.
 
 #### Configuration Options
-Access **Configure** on the integration card to customize:
+Access **Configure** on the integration card to adjust global defaults or configure specific speakers:
+- **Configure Specific Speaker**: Select any speaker to customize its individual parameters, or select `Global Defaults` to set entry-wide behavior.
 - **Hardware Scan Duration** (`scan_timeout`): Duration in seconds for each active inquiry scan on the speaker (default: `5s`).
 - **Interval Between Scans** (`scan_interval`): Cooldown pause between scans (default: `10s`).
 - **Minimum RSSI Threshold** (`rssi_threshold`): Discards weak or fringe signals below this dBm value (default: `-90 dBm`).
-- **Speaker Selection**: Disable specific speakers from acting as proxy nodes.
+- **Bermuda RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied before injecting packets into Bermuda (default: `0 dBm`).
+- **Playback Mode** (`playback_mode`): Action during active media playback: `pause` scanning entirely, `throttle` interval, or `ignore` (default: `pause`).
+- **Playback Throttle Interval** (`playback_threshold`): Multiplier / interval used when playback mode is set to throttle (default: `30s`).
+- **Initial Delay** (`initial_delay`): Startup jitter offset to prevent simultaneous scanning spikes across multiple speakers (default: `0s`).
 
 ---
 
@@ -78,28 +104,37 @@ Access **Configure** on the integration card to customize:
    - Install and open the **Bermuda BLE Trilateration** integration.
    - Bermuda will automatically detect the Google Home proxy scanners from the Bluetooth framework.
    - Set each scanner's reference location/area. Bermuda will then provide room-level `device_tracker` and `sensor` entities for all tracked BLE devices.
+4. **Calibrate RSSI**:
+   - If using mixed generations (e.g. Nest Mini Gen 2 alongside Home Mini Gen 1), use the `rssi_offset` option on individual speakers to align reported dBm signals for balanced distance calculations.
 
 ---
 
 ## 🔍 Empirical Speaker Probing Utility
 
-The repository includes a standalone diagnostic tool to test speaker Bluetooth scanning directly:
+The repository includes a standalone diagnostic tool to test speaker Bluetooth scanning and classify device compatibility directly:
 
 ```bash
-uv run scripts/probe_speaker.py --host 192.168.1.50 --token "your-cast-local-authorization-token" --timeout 5
+# Basic discovery probe (checks eureka_info and classifies device)
+uv run scripts/probe_speaker.py --host 192.168.1.110
+
+# Full inquiry scan and Cast V2 socket verification with local token
+uv run scripts/probe_speaker.py --host 192.168.1.110 --token "your-token" --timeout 5 --check-cast
 ```
 
 ### Options:
-- `--host`: IP address of your Google Home or Nest speaker.
+- `--host`: IP address of your Google Home speaker, Cast TV, or soundbar.
 - `--port`: HTTPS API port (default: `8443`).
-- `--token`: Speaker local authorization token (`cast-local-authorization-token`).
+- `--token`: Speaker local authorization token (optional for open status/eureka endpoints).
 - `--timeout`: Hardware scan window in seconds (default: `5`).
+- `--check-cast`: Probes the Cast V2 TLS control socket on port `8009`.
 
 The script queries:
 - `GET /setup/eureka_info`: Device metadata, firmware, and capabilities.
 - `GET /setup/bluetooth/status`: Bluetooth subsystem readiness.
 - `POST /setup/bluetooth/scan`: Triggers an active inquiry scan.
 - `GET /setup/bluetooth/scan_results`: Dumps detected MAC addresses, RSSI values, and device names.
+- Socket probe on port `8009`: Verifies Cast V2 media controller connectivity.
+- Automatically outputs hardware classification (Fully Compatible, Android TV Playback-Only, or Third-Party Cast).
 
 ---
 
