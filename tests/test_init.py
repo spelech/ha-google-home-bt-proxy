@@ -448,3 +448,134 @@ async def test_speaker_scan_loop_playback_ignore():
     mock_api.start_scan.assert_called_once_with(mock_speaker, timeout=5)
     mock_sleep.assert_any_call(5)
     mock_sleep.assert_any_call(10)
+
+
+@pytest.mark.asyncio
+async def test_async_setup_and_unload_platforms():
+    """Verify platforms are forwarded on setup and unloaded on unload."""
+    from homeassistant.const import Platform
+
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    mock_hass.async_create_background_task.side_effect = lambda target, name=None: (
+        target.close(),
+        MagicMock(),
+    )[1]
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-platforms-entry"
+    mock_entry.data = {}
+    mock_entry.options = {}
+
+    mock_forward = AsyncMock(return_value=True)
+    mock_unload = AsyncMock(return_value=True)
+    mock_hass.config_entries.async_forward_entry_setups = mock_forward
+    mock_hass.config_entries.async_unload_platforms = mock_unload
+
+    speaker = SpeakerNode(
+        device_id="spk-diag-1",
+        name="Dining Speaker",
+        ip_address="192.168.1.88",
+        auth_token="token-diag",
+    )
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance", AsyncMock()),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
+        patch(
+            "custom_components.google_home_bt_proxy.bluetooth.async_register_scanner",
+            return_value=MagicMock(),
+        ),
+    ):
+        mock_coord_cls.return_value.async_get_speakers = AsyncMock(return_value=[speaker])
+
+        result = await async_setup_entry(mock_hass, mock_entry)
+        assert result is True
+
+        entry_data = mock_hass.data[DOMAIN][mock_entry.entry_id]
+        assert "speakers" in entry_data
+        assert "spk-diag-1" in entry_data["speakers"]
+        state = entry_data["speakers"]["spk-diag-1"]["state"]
+        assert state.enabled is True
+        assert state.status == "idle"
+
+        mock_forward.assert_called_once_with(
+            mock_entry,
+            [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON],
+        )
+
+        unload_ok = await async_unload_entry(mock_hass, mock_entry)
+        assert unload_ok is True
+        mock_unload.assert_called_once_with(
+            mock_entry,
+            [Platform.SENSOR, Platform.SWITCH, Platform.BUTTON],
+        )
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_disabled_and_immediate_trigger():
+    """Verify scan loop obeys disabled switch and immediate trigger button."""
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[MagicMock()])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-ctrl",
+        name="Control Speaker",
+        ip_address="192.168.1.99",
+        auth_token="auth-ctrl",
+    )
+    mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
+    state = SpeakerProxyState(enabled=False)
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        # Loop 1: disabled (sleep 1.0). Then enabled + immediate trigger.
+        # Loop 2: scans, then CancelledError.
+        def sleep_side_effect(duration):
+
+            if duration == 0.0:
+                return None
+            elif duration == 1.0:
+                state.enabled = True
+                state.trigger_scan_event.set()
+                return None
+            elif duration == 5:  # active_timeout
+                return None
+            else:
+                raise asyncio.CancelledError()
+
+        mock_sleep.side_effect = sleep_side_effect
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    assert mock_api.start_scan.call_count == 2
+    assert state.last_scan_count == 1
+    assert state.total_advertisements == 2
+    assert state.status == "idle"
