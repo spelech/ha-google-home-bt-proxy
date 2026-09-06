@@ -68,3 +68,55 @@ def test_playback_constants():
     assert DEFAULT_PLAYING_SCAN_TIMEOUT == 2
     assert DEFAULT_PLAYING_SCAN_INTERVAL == 30
     assert DEFAULT_MAX_PLAYING_SKIP_DURATION == 120
+
+
+def test_speaker_override_constants():
+    """Verify constants for hierarchical per-speaker configuration."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_CUSTOM_SETTINGS,
+        CONF_SELECTED_SPEAKER,
+        CONF_SPEAKER_OVERRIDES,
+        GLOBAL_SETTINGS,
+    )
+
+    assert CONF_SPEAKER_OVERRIDES == "speaker_overrides"
+    assert CONF_SELECTED_SPEAKER == "selected_speaker"
+    assert CONF_CUSTOM_SETTINGS == "custom_settings"
+    assert GLOBAL_SETTINGS == "global"
+
+
+def test_rf_calibration_constants():
+    """Verify RF calibration constants and defaults."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_RSSI_OFFSET,
+        DEFAULT_RSSI_OFFSET,
+    )
+
+    assert CONF_RSSI_OFFSET == "rssi_offset"
+    assert DEFAULT_RSSI_OFFSET == 0
+
+
+def test_speaker_proxy_state_model():
+    """Verify SpeakerProxyState runtime model and callback dispatch."""
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    state = SpeakerProxyState()
+    assert state.status == "idle"
+    assert state.total_advertisements == 0
+    assert state.last_scan_count == 0
+    assert state.last_scan_duration == 0.0
+    assert state.last_scan_timestamp is None
+    assert state.enabled is True
+
+    called = []
+
+    def cb():
+        called.append(True)
+
+    unreg = state.register_callback(cb)
+    state.notify_callbacks()
+    assert len(called) == 1
+
+    unreg()
+    state.notify_callbacks()
+    assert len(called) == 1
