@@ -22,6 +22,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         name: str,
         connectable: bool = False,
         irk_resolver: IrkResolver | None = None,
+        rssi_offset: int = 0,
     ) -> None:
         """Initialize the remote scanner."""
         super().__init__(
@@ -32,7 +33,13 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         )
         self.name = name
         self._irk_resolver = irk_resolver
-        _LOGGER.debug("Initialized GoogleHomeRemoteScanner [%s] %s", scanner_id, name)
+        self._rssi_offset = rssi_offset
+        _LOGGER.debug(
+            "Initialized GoogleHomeRemoteScanner [%s] %s (offset: %d dBm)",
+            scanner_id,
+            name,
+            rssi_offset,
+        )
 
     def process_scan_results(
         self,
@@ -44,13 +51,17 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         now = time.monotonic()
 
         for device in devices:
-            if device.rssi < min_rssi:
+            calibrated_rssi = max(-127, min(0, device.rssi + self._rssi_offset))
+            if calibrated_rssi < min_rssi:
                 _LOGGER.debug(
-                    "Skipping device %s on %s: RSSI %d below threshold %d",
+                    "Skipping device %s on %s: Calibrated RSSI %d below threshold %d "
+                    "(raw: %d, offset: %d)",
                     device.mac_address,
                     self.name,
-                    device.rssi,
+                    calibrated_rssi,
                     min_rssi,
+                    device.rssi,
+                    self._rssi_offset,
                 )
                 continue
 
@@ -64,7 +75,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
 
             self._async_on_advertisement(
                 address=device.mac_address,
-                rssi=device.rssi,
+                rssi=calibrated_rssi,
                 local_name=local_name,
                 service_uuids=device.service_uuids,
                 service_data={},
@@ -73,6 +84,8 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
                 details={
                     "source": self.source,
                     "scanner_id": self.source,
+                    "raw_rssi": device.rssi,
+                    "rssi_offset": self._rssi_offset,
                     "device_type": device.device_type,
                     "device_class": device.device_class,
                     "device_class_name": device.device_class_name,

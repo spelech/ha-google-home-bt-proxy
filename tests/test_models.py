@@ -70,6 +70,17 @@ def test_playback_constants():
     assert DEFAULT_MAX_PLAYING_SKIP_DURATION == 120
 
 
+def test_rf_calibration_constants():
+    """Verify RF calibration constants and defaults."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_RSSI_OFFSET,
+        DEFAULT_RSSI_OFFSET,
+    )
+
+    assert CONF_RSSI_OFFSET == "rssi_offset"
+    assert DEFAULT_RSSI_OFFSET == 0
+
+
 def test_speaker_proxy_state_model():
     """Verify SpeakerProxyState runtime model and callback dispatch."""
     from custom_components.google_home_bt_proxy.models import SpeakerProxyState
