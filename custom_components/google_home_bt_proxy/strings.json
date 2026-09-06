@@ -30,8 +30,12 @@
       "init": {
         "title": "Bluetooth Proxy Settings",
         "data": {
-          "scan_timeout": "Hardware Scan Duration (seconds)",
-          "scan_interval": "Interval Between Scans (seconds)",
+          "playback_mode": "Media Playback Handling Mode",
+          "scan_timeout": "Idle Scan Duration (seconds)",
+          "scan_interval": "Idle Scan Interval (seconds)",
+          "playing_scan_timeout": "Playback Scan Duration (seconds)",
+          "playing_scan_interval": "Playback Scan Interval (seconds)",
+          "max_playing_skip_duration": "Max Continuous Playback Skip Ceiling (seconds)",
           "rssi_threshold": "Minimum RSSI Threshold (dBm)"
         }
       }

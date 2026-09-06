@@ -159,6 +159,45 @@ async def test_options_flow():
 
 
 @pytest.mark.asyncio
+async def test_options_flow_with_playback_settings():
+    """Verify options flow accepts playback mode and timing settings."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_MAX_PLAYING_SKIP_DURATION,
+        CONF_PLAYBACK_MODE,
+        CONF_PLAYING_SCAN_INTERVAL,
+        CONF_PLAYING_SCAN_TIMEOUT,
+        MODE_SKIP_CEILING,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+
+    # Show form and verify schema includes new fields
+    form_result = await handler.async_step_init(None)
+    assert form_result["type"] == "form"
+    schema_keys = [k.schema for k in form_result["data_schema"].schema.keys()]
+    assert CONF_PLAYBACK_MODE in schema_keys
+    assert CONF_PLAYING_SCAN_TIMEOUT in schema_keys
+    assert CONF_PLAYING_SCAN_INTERVAL in schema_keys
+    assert CONF_MAX_PLAYING_SKIP_DURATION in schema_keys
+
+    # Submit form
+    user_input = {
+        CONF_PLAYBACK_MODE: MODE_SKIP_CEILING,
+        CONF_PLAYING_SCAN_TIMEOUT: 3,
+        CONF_PLAYING_SCAN_INTERVAL: 45,
+        CONF_MAX_PLAYING_SKIP_DURATION: 180,
+    }
+    create_result = await handler.async_step_init(user_input)
+    assert create_result["type"] == "create_entry"
+    assert create_result["data"][CONF_PLAYBACK_MODE] == MODE_SKIP_CEILING
+    assert create_result["data"][CONF_PLAYING_SCAN_TIMEOUT] == 3
+    assert create_result["data"][CONF_PLAYING_SCAN_INTERVAL] == 45
+    assert create_result["data"][CONF_MAX_PLAYING_SKIP_DURATION] == 180
+
+
+@pytest.mark.asyncio
 async def test_options_flow_fallback_config_entry():
     handler = GoogleHomeBtProxyOptionsFlowHandler.__new__(GoogleHomeBtProxyOptionsFlowHandler)
     mock_entry = MagicMock()

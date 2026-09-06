@@ -19,16 +19,27 @@ from .const import (
     CONF_ANDROID_ID,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
+    CONF_MAX_PLAYING_SKIP_DURATION,
     CONF_OAUTH_TOKEN,
     CONF_PASSWORD,
+    CONF_PLAYBACK_MODE,
+    CONF_PLAYING_SCAN_INTERVAL,
+    CONF_PLAYING_SCAN_TIMEOUT,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
     CONF_USERNAME,
+    DEFAULT_MAX_PLAYING_SKIP_DURATION,
+    DEFAULT_PLAYBACK_MODE,
+    DEFAULT_PLAYING_SCAN_INTERVAL,
+    DEFAULT_PLAYING_SCAN_TIMEOUT,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
     DOMAIN,
+    MODE_IGNORE,
+    MODE_SKIP_CEILING,
+    MODE_THROTTLE,
     NAME,
 )
 
@@ -203,13 +214,31 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Optional(
+                    CONF_PLAYBACK_MODE,
+                    default=options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
+                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
+                vol.Optional(
                     CONF_SCAN_TIMEOUT,
                     default=options.get(CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT),
-                ): vol.All(vol.Coerce(int), vol.Range(min=3, max=15)),
+                ): vol.All(vol.Coerce(int), vol.Range(min=2, max=15)),
                 vol.Optional(
                     CONF_SCAN_INTERVAL,
                     default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                vol.Optional(
+                    CONF_PLAYING_SCAN_TIMEOUT,
+                    default=options.get(CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+                vol.Optional(
+                    CONF_PLAYING_SCAN_INTERVAL,
+                    default=options.get(CONF_PLAYING_SCAN_INTERVAL, DEFAULT_PLAYING_SCAN_INTERVAL),
+                ): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
+                vol.Optional(
+                    CONF_MAX_PLAYING_SKIP_DURATION,
+                    default=options.get(
+                        CONF_MAX_PLAYING_SKIP_DURATION, DEFAULT_MAX_PLAYING_SKIP_DURATION
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=30, max=900)),
                 vol.Optional(
                     CONF_RSSI_THRESHOLD,
                     default=options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),

@@ -11,6 +11,7 @@ from .classification import decode_device_class, is_resolvable_private_address
 from .const import (
     ENDPOINT_BLUETOOTH_SCAN,
     ENDPOINT_BLUETOOTH_SCAN_RESULTS,
+    ENDPOINT_BLUETOOTH_STATUS,
     ENDPOINT_EUREKA_INFO,
     HEADER_CONTENT_TYPE,
     HEADER_LOCAL_AUTH,
@@ -143,6 +144,27 @@ class GoogleHomeApiClient:
                 if resp.status == 200:
                     speaker.available = True
                     return await resp.json()
+                return {}
+        except (aiohttp.ClientError, TimeoutError) as err:
+            speaker.available = False
+            raise SpeakerConnectionError(f"Connection failed to {speaker.name}: {err}") from err
+
+    async def get_bluetooth_status(self, speaker: SpeakerNode) -> dict[str, Any]:
+        """Retrieve bluetooth status from the speaker."""
+        url = self._build_url(speaker.ip_address, ENDPOINT_BLUETOOTH_STATUS)
+        try:
+            async with self._session.get(
+                url,
+                headers=self._headers(speaker.auth_token),
+                timeout=self._timeout,
+                ssl=False,
+            ) as resp:
+                if resp.status == 401:
+                    raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
+                if resp.status == 200:
+                    speaker.available = True
+                    data = await resp.json()
+                    return data if isinstance(data, dict) else {}
                 return {}
         except (aiohttp.ClientError, TimeoutError) as err:
             speaker.available = False

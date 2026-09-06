@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-06
+
+### Added
+- Standalone media playback awareness (`SpeakerPlaybackDetector`) probing Cast V2 TLS (port 8009) and local Bluetooth status (port 8443) without Home Assistant `cast` or `media_player` dependencies.
+- Playback handling modes: `throttle` (relaxed scan cadence and reduced scan timeout), `skip_ceiling` (pause scanning during music with maximum continuous skip ceiling), and `ignore`.
+- Fully configurable timings in options flow: idle duration/interval, playing duration/interval, max skip ceiling, and RSSI threshold.
+
 ## [0.1.0] - 2026-09-06
 
 ### Added
