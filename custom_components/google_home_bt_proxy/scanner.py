@@ -7,6 +7,7 @@ import time
 
 from habluetooth import BaseHaRemoteScanner
 
+from .filter import SignalProcessor
 from .irk import IrkResolver
 from .models import DiscoveredDevice
 
@@ -23,6 +24,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         connectable: bool = False,
         irk_resolver: IrkResolver | None = None,
         rssi_offset: int = 0,
+        signal_processor: SignalProcessor | None = None,
     ) -> None:
         """Initialize the remote scanner."""
         super().__init__(
@@ -34,12 +36,18 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         self.name = name
         self._irk_resolver = irk_resolver
         self._rssi_offset = rssi_offset
+        self._signal_processor = signal_processor or SignalProcessor(rssi_offset=rssi_offset)
         _LOGGER.debug(
             "Initialized GoogleHomeRemoteScanner [%s] %s (offset: %d dBm)",
             scanner_id,
             name,
             rssi_offset,
         )
+
+    @property
+    def signal_processor(self) -> SignalProcessor:
+        """Return the scanner's signal processor."""
+        return self._signal_processor
 
     def process_scan_results(
         self,
@@ -51,23 +59,36 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         now = time.monotonic()
 
         for device in devices:
-            calibrated_rssi = max(-127, min(0, device.rssi + self._rssi_offset))
-            if calibrated_rssi < min_rssi:
-                _LOGGER.debug(
-                    "Skipping device %s on %s: Calibrated RSSI %d below threshold %d "
-                    "(raw: %d, offset: %d)",
-                    device.mac_address,
-                    self.name,
-                    calibrated_rssi,
-                    min_rssi,
-                    device.rssi,
-                    self._rssi_offset,
-                )
-                continue
-
             resolved_identity: str | None = None
             if self._irk_resolver and device.is_rpa:
                 resolved_identity = self._irk_resolver.resolve(device.mac_address)
+
+            signal = self._signal_processor.process(
+                device, resolved_identity=resolved_identity, now=now
+            )
+
+            if not signal.is_allowed:
+                _LOGGER.debug(
+                    "Skipping device %s on %s: Filtered (%s)",
+                    device.mac_address,
+                    self.name,
+                    signal.filter_reason,
+                )
+                continue
+
+            if signal.filtered_rssi < min_rssi:
+                _LOGGER.debug(
+                    "Skipping device %s on %s: Filtered RSSI %d below threshold %d "
+                    "(raw: %d, calibrated: %d, offset: %d)",
+                    device.mac_address,
+                    self.name,
+                    signal.filtered_rssi,
+                    min_rssi,
+                    device.rssi,
+                    signal.calibrated_rssi,
+                    self._rssi_offset,
+                )
+                continue
 
             # Preserve raw address so HA Core & Bermuda resolution takes precedence.
             # Use advertised name if available; fallback to resolved identity name if matched.
@@ -75,7 +96,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
 
             self._async_on_advertisement(
                 address=device.mac_address,
-                rssi=calibrated_rssi,
+                rssi=signal.filtered_rssi,
                 local_name=local_name,
                 service_uuids=device.service_uuids,
                 service_data={},
@@ -85,6 +106,10 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
                     "source": self.source,
                     "scanner_id": self.source,
                     "raw_rssi": device.rssi,
+                    "calibrated_rssi": signal.calibrated_rssi,
+                    "filtered_rssi": signal.filtered_rssi,
+                    "estimated_distance": signal.estimated_distance,
+                    "samples_count": signal.samples_count,
                     "rssi_offset": self._rssi_offset,
                     "device_type": device.device_type,
                     "device_class": device.device_class,

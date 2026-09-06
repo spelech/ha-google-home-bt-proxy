@@ -20,23 +20,42 @@ from .auth_view import GoogleHomeBtProxyAuthCallbackView
 from .const import (
     CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
+    CONF_ENABLE_DISTANCE_ESTIMATION,
+    CONF_ENABLE_RSSI_SMOOTHING,
+    CONF_FILTER_MODE,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
+    CONF_MAX_DISTANCE,
     CONF_MAX_PLAYING_SKIP_DURATION,
+    CONF_ORCHESTRATION_MODE,
     CONF_PASSWORD,
+    CONF_PATH_LOSS_EXPONENT,
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
+    CONF_REF_POWER,
+    CONF_RSSI_FILTER_MODE,
+    CONF_RSSI_FILTER_WINDOW,
     CONF_RSSI_OFFSET,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
     CONF_SPEAKER_OVERRIDES,
+    CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+    DEFAULT_ENABLE_RSSI_SMOOTHING,
+    DEFAULT_FILTER_MODE,
+    DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
+    DEFAULT_ORCHESTRATION_MODE,
+    DEFAULT_PATH_LOSS_EXPONENT,
     DEFAULT_PLAYBACK_MODE,
     DEFAULT_PLAYING_SCAN_INTERVAL,
     DEFAULT_PLAYING_SCAN_TIMEOUT,
+    DEFAULT_REF_POWER,
+    DEFAULT_RSSI_FILTER_MODE,
+    DEFAULT_RSSI_FILTER_WINDOW,
     DEFAULT_RSSI_OFFSET,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
@@ -45,10 +64,13 @@ from .const import (
     MODE_IGNORE,
     MODE_SKIP_CEILING,
     MODE_THROTTLE,
+    ORCHESTRATION_INDEPENDENT,
 )
 from .coordinator import GoogleHomeProxyCoordinator
+from .filter import SignalProcessor
 from .irk import IrkResolver, parse_irk_config
 from .models import SpeakerNode, SpeakerProxyState
+from .orchestrator import ScanOrchestrator
 from .playback import SpeakerPlaybackDetector
 from .scanner import GoogleHomeRemoteScanner
 
@@ -94,18 +116,82 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     irk_map = parse_irk_config(irk_config_text)
     irk_resolver = IrkResolver(irk_map) if irk_map else None
 
+    orchestrator_mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
+    orchestrator = ScanOrchestrator(mode=orchestrator_mode)
+
     scanners: dict[str, GoogleHomeRemoteScanner] = {}
     speakers_data: dict[str, dict[str, Any]] = {}
     unregister_callbacks: list[Callable[[], None]] = []
     worker_tasks: list[asyncio.Task[None]] = []
 
-    rssi_offset = entry.options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET)
     for index, speaker in enumerate(active_speakers):
+        speaker_rssi_offset = _get_speaker_setting(
+            entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
+        )
+        filter_mode = _get_speaker_setting(
+            entry, speaker.device_id, CONF_FILTER_MODE, DEFAULT_FILTER_MODE
+        )
+        tracked_raw = _get_speaker_setting(entry, speaker.device_id, CONF_TRACKED_DEVICES, [])
+        if isinstance(tracked_raw, str):
+            tracked_devices = [d.strip() for d in tracked_raw.split(",") if d.strip()]
+        else:
+            tracked_devices = list(tracked_raw or [])
+
+        max_distance = float(
+            _get_speaker_setting(entry, speaker.device_id, CONF_MAX_DISTANCE, DEFAULT_MAX_DISTANCE)
+        )
+        ref_power = int(
+            _get_speaker_setting(entry, speaker.device_id, CONF_REF_POWER, DEFAULT_REF_POWER)
+        )
+        path_loss_exponent = float(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT
+            )
+        )
+        enable_rssi_smoothing = bool(
+            _get_speaker_setting(
+                entry,
+                speaker.device_id,
+                CONF_ENABLE_RSSI_SMOOTHING,
+                DEFAULT_ENABLE_RSSI_SMOOTHING,
+            )
+        )
+        smoothing_mode = _get_speaker_setting(
+            entry, speaker.device_id, CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE
+        )
+        smoothing_window = int(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW
+            )
+        )
+        enable_distance_estimation = bool(
+            _get_speaker_setting(
+                entry,
+                speaker.device_id,
+                CONF_ENABLE_DISTANCE_ESTIMATION,
+                DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+            )
+        )
+
+        signal_processor = SignalProcessor(
+            filter_mode=filter_mode,
+            tracked_devices=tracked_devices,
+            enable_distance_estimation=enable_distance_estimation,
+            max_distance=max_distance,
+            ref_power=ref_power,
+            path_loss_exponent=path_loss_exponent,
+            rssi_offset=speaker_rssi_offset,
+            enable_rssi_smoothing=enable_rssi_smoothing,
+            smoothing_mode=smoothing_mode,
+            smoothing_window=smoothing_window,
+        )
+
         scanner = GoogleHomeRemoteScanner(
             scanner_id=f"google_home_{speaker.device_id}",
             name=f"{speaker.name} Bluetooth Proxy",
             irk_resolver=irk_resolver,
-            rssi_offset=rssi_offset,
+            rssi_offset=speaker_rssi_offset,
+            signal_processor=signal_processor,
         )
         scanners[speaker.device_id] = scanner
         proxy_state = SpeakerProxyState(enabled=speaker.enabled)
@@ -137,6 +223,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 stagger_delay,
                 playback_detector=playback_detector,
                 state=proxy_state,
+                orchestrator=orchestrator,
             ),
             name=f"google_home_bt_proxy_{speaker.device_id}",
         )
@@ -146,11 +233,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "api_client": api_client,
         "playback_detector": playback_detector,
+        "orchestrator": orchestrator,
         "scanners": scanners,
         "speakers": speakers_data,
         "unregister_callbacks": unregister_callbacks,
         "worker_tasks": worker_tasks,
     }
+
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     forward_setups = getattr(
         getattr(hass, "config_entries", None), "async_forward_entry_setups", None
@@ -186,12 +276,15 @@ async def _speaker_scan_loop(
     initial_delay: float,
     playback_detector: SpeakerPlaybackDetector | None = None,
     state: SpeakerProxyState | None = None,
+    orchestrator: ScanOrchestrator | None = None,
 ) -> None:
     """Continuous staggered polling scan loop for an individual speaker."""
     if playback_detector is None:
         playback_detector = SpeakerPlaybackDetector(api_client)
     if state is None:
         state = SpeakerProxyState(enabled=speaker.enabled)
+    if orchestrator is None:
+        orchestrator = ScanOrchestrator(mode=ORCHESTRATION_INDEPENDENT)
 
     await asyncio.sleep(initial_delay)
     _LOGGER.info("Starting Bluetooth scan worker loop for %s", speaker.name)
@@ -229,6 +322,67 @@ async def _speaker_scan_loop(
         rssi_threshold = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD
         )
+        speaker_rssi_offset = _get_speaker_setting(
+            entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
+        )
+        scanner._rssi_offset = speaker_rssi_offset
+
+        # Dynamically sync scanner signal processor and orchestrator settings
+        if hasattr(scanner, "signal_processor"):
+            sp = scanner.signal_processor
+            sp.rssi_offset = speaker_rssi_offset
+            sp.filter_mode = _get_speaker_setting(
+                entry, speaker.device_id, CONF_FILTER_MODE, DEFAULT_FILTER_MODE
+            )
+            tracked_raw = _get_speaker_setting(entry, speaker.device_id, CONF_TRACKED_DEVICES, [])
+            if isinstance(tracked_raw, str):
+                sp.tracked_devices = {
+                    d.strip().upper() for d in tracked_raw.split(",") if d.strip()
+                }
+            else:
+                sp.tracked_devices = {d.strip().upper() for d in tracked_raw if d.strip()}
+            sp.max_distance = max(
+                0.0,
+                float(
+                    _get_speaker_setting(
+                        entry, speaker.device_id, CONF_MAX_DISTANCE, DEFAULT_MAX_DISTANCE
+                    )
+                ),
+            )
+            sp.ref_power = int(
+                _get_speaker_setting(entry, speaker.device_id, CONF_REF_POWER, DEFAULT_REF_POWER)
+            )
+            sp.path_loss_exponent = float(
+                _get_speaker_setting(
+                    entry, speaker.device_id, CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT
+                )
+            )
+            sp.enable_rssi_smoothing = bool(
+                _get_speaker_setting(
+                    entry,
+                    speaker.device_id,
+                    CONF_ENABLE_RSSI_SMOOTHING,
+                    DEFAULT_ENABLE_RSSI_SMOOTHING,
+                )
+            )
+            sp.smoother.mode = _get_speaker_setting(
+                entry, speaker.device_id, CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE
+            )
+            sp.smoother.window_size = int(
+                _get_speaker_setting(
+                    entry, speaker.device_id, CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW
+                )
+            )
+            sp.enable_distance_estimation = bool(
+                _get_speaker_setting(
+                    entry,
+                    speaker.device_id,
+                    CONF_ENABLE_DISTANCE_ESTIMATION,
+                    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+                )
+            )
+
+        orchestrator.mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
 
         is_playing = False
         if playback_mode != MODE_IGNORE:
@@ -280,24 +434,39 @@ async def _speaker_scan_loop(
 
         if should_scan:
             try:
-                state.status = "scanning"
+                state.status = "waiting_slot"
                 state.notify_callbacks()
 
-                # 1. Trigger hardware scan
-                await api_client.start_scan(speaker, timeout=active_timeout)
+                async with orchestrator.acquire_slot(speaker.device_id) as acquired:
+                    if not acquired:
+                        _LOGGER.debug(
+                            "Speaker %s timed out waiting for scan slot; skipping cycle",
+                            speaker.name,
+                        )
+                        state.status = "idle"
+                        state.notify_callbacks()
+                        await asyncio.sleep(active_interval)
+                        continue
 
-                # 2. Await hardware scan duration
-                await asyncio.sleep(active_timeout)
+                    state.status = "scanning"
+                    state.notify_callbacks()
 
-                # 3. Retrieve scan results
-                results = await api_client.get_scan_results(speaker)
+                    # 1. Trigger hardware scan
+                    await api_client.start_scan(speaker, timeout=active_timeout)
+
+                    # 2. Await hardware scan duration
+                    await asyncio.sleep(active_timeout)
+
+                    # 3. Retrieve scan results
+                    results = await api_client.get_scan_results(speaker)
 
                 # 4. Inject into Home Assistant Bluetooth Manager
-                scanner.process_scan_results(results, min_rssi=rssi_threshold)
+                injected = scanner.process_scan_results(results, min_rssi=rssi_threshold)
                 backoff = 1.0
 
                 state.last_scan_count = len(results)
                 state.total_advertisements += len(results)
+                state.filtered_advertisements += len(results) - injected
                 state.last_scan_duration = float(active_timeout)
                 state.last_scan_timestamp = time.time()
                 state.status = "idle"
@@ -335,6 +504,12 @@ async def _speaker_scan_loop(
             _LOGGER.debug("Immediate scan triggered via event for %s", speaker.name)
         else:
             await asyncio.sleep(active_interval)
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload config entry."""
+    await async_unload_entry(hass, entry)
+    await async_setup_entry(hass, entry)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

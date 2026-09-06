@@ -475,3 +475,75 @@ async def test_options_flow_speaker_overrides():
     remove_result = await handler2.async_step_speaker_settings(remove_input)
     assert remove_result["type"] == "create_entry"
     assert "spk-office" not in remove_result["data"][CONF_SPEAKER_OVERRIDES]
+
+
+@pytest.mark.asyncio
+async def test_options_flow_signal_processing_and_orchestration():
+    """Verify options flow allows configuring signal processing and orchestration settings."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_ENABLE_DISTANCE_ESTIMATION,
+        CONF_ENABLE_RSSI_SMOOTHING,
+        CONF_FILTER_MODE,
+        CONF_MAX_DISTANCE,
+        CONF_ORCHESTRATION_MODE,
+        CONF_PATH_LOSS_EXPONENT,
+        CONF_REF_POWER,
+        CONF_RSSI_FILTER_MODE,
+        CONF_RSSI_FILTER_WINDOW,
+        CONF_SELECTED_SPEAKER,
+        CONF_TRACKED_DEVICES,
+        FILTER_MODE_WHITELIST,
+        GLOBAL_SETTINGS,
+        ORCHESTRATION_INDEPENDENT,
+        RSSI_FILTER_EMA,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+    mock_entry.entry_id = "entry-opt-signal"
+
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    mock_hass = MagicMock()
+    mock_hass.data = {DOMAIN: {"entry-opt-signal": {}}}
+    handler.hass = mock_hass
+
+    # 1. Check form schema includes signal processing keys
+    form = await handler.async_step_init(None)
+    schema_keys = [k.schema for k in form["data_schema"].schema.keys()]
+    assert CONF_ORCHESTRATION_MODE in schema_keys
+    assert CONF_FILTER_MODE in schema_keys
+    assert CONF_TRACKED_DEVICES in schema_keys
+    assert CONF_ENABLE_RSSI_SMOOTHING in schema_keys
+    assert CONF_RSSI_FILTER_MODE in schema_keys
+    assert CONF_RSSI_FILTER_WINDOW in schema_keys
+    assert CONF_ENABLE_DISTANCE_ESTIMATION in schema_keys
+    assert CONF_MAX_DISTANCE in schema_keys
+    assert CONF_REF_POWER in schema_keys
+    assert CONF_PATH_LOSS_EXPONENT in schema_keys
+
+    # 2. Save global signal options
+    global_payload = {
+        CONF_SELECTED_SPEAKER: GLOBAL_SETTINGS,
+        CONF_ORCHESTRATION_MODE: ORCHESTRATION_INDEPENDENT,
+        CONF_FILTER_MODE: FILTER_MODE_WHITELIST,
+        CONF_TRACKED_DEVICES: "AA:BB:CC,Beacon",
+        CONF_ENABLE_RSSI_SMOOTHING: False,
+        CONF_RSSI_FILTER_MODE: RSSI_FILTER_EMA,
+        CONF_RSSI_FILTER_WINDOW: 5,
+        CONF_ENABLE_DISTANCE_ESTIMATION: False,
+        CONF_MAX_DISTANCE: 7.5,
+        CONF_REF_POWER: -62,
+        CONF_PATH_LOSS_EXPONENT: 2.8,
+    }
+    result = await handler.async_step_init(global_payload)
+    assert result["type"] == "create_entry"
+    assert result["data"][CONF_ORCHESTRATION_MODE] == ORCHESTRATION_INDEPENDENT
+    assert result["data"][CONF_FILTER_MODE] == FILTER_MODE_WHITELIST
+    assert result["data"][CONF_TRACKED_DEVICES] == "AA:BB:CC,Beacon"
+    assert result["data"][CONF_ENABLE_RSSI_SMOOTHING] is False
+    assert result["data"][CONF_RSSI_FILTER_MODE] == RSSI_FILTER_EMA
+    assert result["data"][CONF_RSSI_FILTER_WINDOW] == 5
+    assert result["data"][CONF_ENABLE_DISTANCE_ESTIMATION] is False
+    assert result["data"][CONF_MAX_DISTANCE] == 7.5
+    assert result["data"][CONF_REF_POWER] == -62
+    assert result["data"][CONF_PATH_LOSS_EXPONENT] == 2.8

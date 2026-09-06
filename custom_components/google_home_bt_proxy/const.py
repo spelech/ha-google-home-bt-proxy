@@ -30,6 +30,31 @@ CONF_SELECTED_SPEAKER: Final = "selected_speaker"
 CONF_CUSTOM_SETTINGS: Final = "custom_settings"
 GLOBAL_SETTINGS: Final = "global"
 
+# Filter & Signal Processing Keys
+CONF_ENABLE_RSSI_SMOOTHING: Final = "enable_rssi_smoothing"
+CONF_ENABLE_DISTANCE_ESTIMATION: Final = "enable_distance_estimation"
+CONF_FILTER_MODE: Final = "filter_mode"
+CONF_TRACKED_DEVICES: Final = "tracked_devices"
+CONF_RSSI_FILTER_MODE: Final = "rssi_filter_mode"
+CONF_RSSI_FILTER_WINDOW: Final = "rssi_filter_window"
+CONF_MAX_DISTANCE: Final = "max_distance"
+CONF_REF_POWER: Final = "ref_power"
+CONF_PATH_LOSS_EXPONENT: Final = "path_loss_exponent"
+CONF_ORCHESTRATION_MODE: Final = "orchestration_mode"
+
+# Filter Modes
+FILTER_MODE_ALL: Final = "all"
+FILTER_MODE_KNOWN_ONLY: Final = "known_only"
+FILTER_MODE_WHITELIST: Final = "whitelist"
+
+# RSSI Filter Algorithms
+RSSI_FILTER_NONE: Final = "none"
+RSSI_FILTER_MEDIAN: Final = "median"
+RSSI_FILTER_EMA: Final = "ema"
+
+# Orchestration Modes
+ORCHESTRATION_INDEPENDENT: Final = "independent"
+ORCHESTRATION_ROUND_ROBIN: Final = "round_robin"
 
 # Playback modes
 MODE_THROTTLE: Final = "throttle"
@@ -45,6 +70,15 @@ DEFAULT_PLAYING_SCAN_INTERVAL: Final = 30  # seconds between scans during playba
 DEFAULT_MAX_PLAYING_SKIP_DURATION: Final = 120  # seconds maximum continuous skip before forced scan
 DEFAULT_RSSI_THRESHOLD: Final = -90  # dBm
 DEFAULT_RSSI_OFFSET: Final = 0  # dBm calibration offset
+DEFAULT_ENABLE_RSSI_SMOOTHING: Final = True
+DEFAULT_ENABLE_DISTANCE_ESTIMATION: Final = True
+DEFAULT_FILTER_MODE: Final = FILTER_MODE_ALL
+DEFAULT_RSSI_FILTER_MODE: Final = RSSI_FILTER_MEDIAN
+DEFAULT_RSSI_FILTER_WINDOW: Final = 3
+DEFAULT_MAX_DISTANCE: Final = 0.0  # 0.0 means disabled
+DEFAULT_REF_POWER: Final = -59  # dBm @ 1m
+DEFAULT_PATH_LOSS_EXPONENT: Final = 2.5
+DEFAULT_ORCHESTRATION_MODE: Final = ORCHESTRATION_ROUND_ROBIN
 
 
 # API Constants

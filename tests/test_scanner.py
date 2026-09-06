@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+from custom_components.google_home_bt_proxy.filter import SignalProcessor
 from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerNode
 from custom_components.google_home_bt_proxy.scanner import GoogleHomeRemoteScanner
 
@@ -173,3 +174,76 @@ def test_process_scan_results_rssi_offset_and_clamping():
         min_rssi=-128,
     )
     assert low_clamp_scanner._async_on_advertisement.call_args[1]["rssi"] == -127  # Clamped to -127
+
+
+def test_process_scan_results_signal_processor_integration():
+    """Verify SignalProcessor filtering and enriched distance/smoothing in process_scan_results."""
+    from custom_components.google_home_bt_proxy.const import FILTER_MODE_WHITELIST
+    from custom_components.google_home_bt_proxy.filter import SignalProcessor
+
+    processor = SignalProcessor(
+        filter_mode=FILTER_MODE_WHITELIST,
+        tracked_devices=["AA:BB:CC"],
+        max_distance=5.0,
+        ref_power=-59,
+        path_loss_exponent=2.0,
+    )
+
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="spk_filtered",
+        name="Filtered Scanner",
+        signal_processor=processor,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    devices = [
+        # Device 1: Matches whitelist, within distance (~1.1m <= 5.0m) -> should inject
+        DiscoveredDevice(mac_address="AA:BB:CC:11:22:33", rssi=-60),
+        # Device 2: Matches whitelist, but distance (~19.9m > 5.0m) -> filtered
+        DiscoveredDevice(mac_address="AA:BB:CC:44:55:66", rssi=-85),
+        # Device 3: Within distance (~1.1m <= 5.0m), but not in whitelist -> filtered
+        DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-60),
+    ]
+
+    injected = scanner.process_scan_results(devices, min_rssi=-90)
+    assert injected == 1
+
+    scanner._async_on_advertisement.assert_called_once()
+    call_args = scanner._async_on_advertisement.call_args[1]
+    assert call_args["address"] == "AA:BB:CC:11:22:33"
+    assert call_args["rssi"] == -60
+
+    details = call_args["details"]
+    assert details["raw_rssi"] == -60
+    assert details["calibrated_rssi"] == -60
+    assert details["filtered_rssi"] == -60
+    assert details["estimated_distance"] is not None
+    assert details["estimated_distance"] <= 5.0
+    assert details["samples_count"] == 1
+
+
+def test_scanner_with_signal_processor_disabled_features():
+    """Verify scanner details contain None for estimated_distance when disabled."""
+    proc = SignalProcessor(
+        enable_rssi_smoothing=False,
+        enable_distance_estimation=False,
+        rssi_offset=4,
+    )
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="test_disabled_features",
+        name="Disabled Features Scanner",
+        signal_processor=proc,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    device = DiscoveredDevice(mac_address="AA:BB:CC:DD:EE:FF", rssi=-70)
+    injected = scanner.process_scan_results([device], min_rssi=-90)
+    assert injected == 1
+
+    call_args = scanner._async_on_advertisement.call_args[1]
+    details = call_args["details"]
+    assert details["raw_rssi"] == -70
+    assert details["calibrated_rssi"] == -66
+    assert details["filtered_rssi"] == -66
+    assert details["estimated_distance"] is None
+    assert details["samples_count"] == 1

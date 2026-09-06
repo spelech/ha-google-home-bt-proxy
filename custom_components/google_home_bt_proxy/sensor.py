@@ -30,6 +30,7 @@ async def async_setup_entry(
         state: SpeakerProxyState = data["state"]
         entities.append(GoogleHomeBtProxyStatusSensor(speaker, state))
         entities.append(GoogleHomeBtProxyAdvertisementsSensor(speaker, state))
+        entities.append(GoogleHomeBtProxyFilteredAdvertisementsSensor(speaker, state))
 
     async_add_entities(entities)
 
@@ -85,6 +86,7 @@ class GoogleHomeBtProxyStatusSensor(GoogleHomeBtProxyBaseSensor):
             "last_scan_count": self._state.last_scan_count,
             "last_scan_duration": self._state.last_scan_duration,
             "last_scan_timestamp": self._state.last_scan_timestamp,
+            "filtered_advertisements": self._state.filtered_advertisements,
         }
 
 
@@ -111,4 +113,24 @@ class GoogleHomeBtProxyAdvertisementsSensor(GoogleHomeBtProxyBaseSensor):
         """Return diagnostic metrics."""
         return {
             "last_scan_count": self._state.last_scan_count,
+            "filtered_advertisements": self._state.filtered_advertisements,
         }
+
+
+class GoogleHomeBtProxyFilteredAdvertisementsSensor(GoogleHomeBtProxyBaseSensor):
+    """Sensor reporting BLE advertisements filtered out by RSSI, distance, or whitelist."""
+
+    _attr_icon = "mdi:filter-check"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_native_unit_of_measurement = "pkts"
+
+    def __init__(self, speaker: SpeakerNode, state: SpeakerProxyState) -> None:
+        """Initialize filtered advertisements sensor."""
+        super().__init__(speaker, state)
+        self._attr_name = "Bluetooth Advertisements Filtered"
+        self._attr_unique_id = f"{speaker.device_id}_advertisements_filtered"
+
+    @property
+    def native_value(self) -> int:
+        """Return total advertisements filtered."""
+        return self._state.filtered_advertisements
