@@ -39,3 +39,30 @@ def test_discovered_device_model():
     assert dev.mac_address == "AA:BB:CC:DD:EE:FF"
     assert dev.rssi == -72
     assert dev.name == "Tile Beacon"
+
+
+def test_playback_constants():
+    """Verify playback configuration constants and defaults."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_MAX_PLAYING_SKIP_DURATION,
+        CONF_PLAYBACK_MODE,
+        CONF_PLAYING_SCAN_INTERVAL,
+        CONF_PLAYING_SCAN_TIMEOUT,
+        DEFAULT_MAX_PLAYING_SKIP_DURATION,
+        DEFAULT_PLAYBACK_MODE,
+        DEFAULT_PLAYING_SCAN_INTERVAL,
+        DEFAULT_PLAYING_SCAN_TIMEOUT,
+        MODE_IGNORE,
+        MODE_SKIP_CEILING,
+        MODE_THROTTLE,
+    )
+
+    assert CONF_PLAYBACK_MODE == "playback_mode"
+    assert MODE_THROTTLE == "throttle"
+    assert MODE_SKIP_CEILING == "skip_ceiling"
+    assert MODE_IGNORE == "ignore"
+    assert DEFAULT_PLAYBACK_MODE == MODE_THROTTLE
+    assert DEFAULT_PLAYING_SCAN_TIMEOUT == 2
+    assert DEFAULT_PLAYING_SCAN_INTERVAL == 30
+    assert DEFAULT_MAX_PLAYING_SKIP_DURATION == 120
+
