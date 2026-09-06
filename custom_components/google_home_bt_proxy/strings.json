@@ -8,6 +8,7 @@
           "username": "Username (Google Email)",
           "password": "Password or App Password",
           "master_token": "Master Token (Alternative to Password)",
+          "oauth_token": "OAuth Token (e.g. oauth2_4/...)",
           "android_id": "Android ID"
         }
       },

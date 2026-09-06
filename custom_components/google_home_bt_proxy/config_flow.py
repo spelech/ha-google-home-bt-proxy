@@ -7,6 +7,8 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+import glocaltokens.client
+import gpsoauth
 import voluptuous as vol
 from glocaltokens.client import GLocalAuthenticationTokens
 from homeassistant import config_entries
@@ -17,6 +19,7 @@ from .const import (
     CONF_ANDROID_ID,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
+    CONF_OAUTH_TOKEN,
     CONF_PASSWORD,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
@@ -28,6 +31,11 @@ from .const import (
     DOMAIN,
     NAME,
 )
+
+if not hasattr(glocaltokens.client, "get_android_id"):
+    glocaltokens.client.get_android_id = (  # type: ignore[attr-defined]
+        GLocalAuthenticationTokens._generate_android_id
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,15 +53,36 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_credentials(self, user_input: dict[str, Any]) -> bool:
         """Verify the provided credentials or master token."""
+        if user_input.get(CONF_MASTER_TOKEN):
+            return True
+
+        if user_input.get(CONF_OAUTH_TOKEN):
+            if not user_input.get(CONF_USERNAME):
+                return False
+            from glocaltokens.client import get_android_id  # type: ignore[attr-defined]
+
+            android_id = user_input.get(CONF_ANDROID_ID) or get_android_id()
+            username = user_input.get(CONF_USERNAME, "")
+            oauth_token = user_input.get(CONF_OAUTH_TOKEN, "")
+
+            def _exchange() -> dict[str, Any]:
+                return gpsoauth.exchange_token(username, oauth_token, android_id)
+
+            res = await self.hass.async_add_executor_job(_exchange)
+            if "Token" in res:
+                user_input[CONF_MASTER_TOKEN] = res["Token"]
+                user_input[CONF_ANDROID_ID] = android_id
+                user_input.pop(CONF_OAUTH_TOKEN, None)
+                return True
+            _LOGGER.warning("OAuth token exchange failed: %s", res)
+            return False
+
         client = GLocalAuthenticationTokens(
             username=user_input.get(CONF_USERNAME),
             password=user_input.get(CONF_PASSWORD),
             master_token=user_input.get(CONF_MASTER_TOKEN),
             android_id=user_input.get(CONF_ANDROID_ID),
         )
-        if user_input.get(CONF_MASTER_TOKEN):
-            return True
-
         token = await self.hass.async_add_executor_job(client.get_master_token)
         return bool(token)
 
@@ -64,6 +93,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_USERNAME, default=""): str,
                 vol.Optional(CONF_PASSWORD, default=""): str,
                 vol.Optional(CONF_MASTER_TOKEN, default=""): str,
+                vol.Optional(CONF_OAUTH_TOKEN, default=""): str,
                 vol.Optional(CONF_ANDROID_ID, default=""): str,
             }
         )

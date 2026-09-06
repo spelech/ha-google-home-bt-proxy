@@ -11,6 +11,7 @@ NAME: Final = "Google Home Bluetooth Proxy"
 CONF_USERNAME: Final = "username"
 CONF_PASSWORD: Final = "password"
 CONF_MASTER_TOKEN: Final = "master_token"
+CONF_OAUTH_TOKEN: Final = "oauth_token"
 CONF_ANDROID_ID: Final = "android_id"
 
 # Options keys
