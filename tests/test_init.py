@@ -1,0 +1,273 @@
+"""Tests for __init__.py lifecycle."""
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from custom_components.google_home_bt_proxy import (
+    _speaker_scan_loop,
+    async_setup_entry,
+    async_unload_entry,
+)
+from custom_components.google_home_bt_proxy.api import (
+    SpeakerConnectionError,
+    TokenExpiredError,
+)
+from custom_components.google_home_bt_proxy.const import (
+    CONF_DISABLED_SPEAKERS,
+    CONF_RSSI_THRESHOLD,
+    CONF_SCAN_INTERVAL,
+    CONF_SCAN_TIMEOUT,
+    DOMAIN,
+)
+from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerNode
+
+
+@pytest.mark.asyncio
+async def test_async_setup_and_unload():
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    mock_hass.async_create_background_task.side_effect = lambda target, name=None: (
+        target.close(),
+        MagicMock(),
+    )[1]
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-entry-id"
+    mock_entry.data = {"master_token": "mt", "android_id": "aid"}
+    mock_entry.options = {}
+    mock_entry.async_on_unload = MagicMock()
+
+    speaker = SpeakerNode(
+        device_id="spk-1",
+        name="Study Speaker",
+        ip_address="192.168.1.55",
+        auth_token="auth-1",
+    )
+
+    unreg_mock = MagicMock()
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance", AsyncMock()),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
+    ):
+        coord_inst = mock_coord_cls.return_value
+        coord_inst.async_get_speakers = AsyncMock(return_value=[speaker])
+
+        with patch(
+            "custom_components.google_home_bt_proxy.bluetooth.async_register_scanner",
+            return_value=unreg_mock,
+        ):
+            result = await async_setup_entry(mock_hass, mock_entry)
+            assert result is True
+            assert DOMAIN in mock_hass.data
+            assert mock_entry.entry_id in mock_hass.data[DOMAIN]
+            assert mock_hass.async_create_background_task.call_count == 1
+
+            mock_task = MagicMock()
+            mock_hass.data[DOMAIN][mock_entry.entry_id]["worker_tasks"] = [mock_task]
+
+            unload_result = await async_unload_entry(mock_hass, mock_entry)
+            assert unload_result is True
+            assert mock_entry.entry_id not in mock_hass.data[DOMAIN]
+            mock_task.cancel.assert_called_once()
+            unreg_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_setup_with_disabled_speakers():
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    mock_hass.async_create_background_task.side_effect = lambda target, name=None: (
+        target.close(),
+        MagicMock(),
+    )[1]
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-entry-disabled"
+    mock_entry.data = {}
+    mock_entry.options = {CONF_DISABLED_SPEAKERS: ["spk-disabled"]}
+
+    spk_enabled = SpeakerNode(
+        device_id="spk-enabled",
+        name="Kitchen Speaker",
+        ip_address="192.168.1.56",
+        auth_token="auth-enabled",
+    )
+    spk_disabled = SpeakerNode(
+        device_id="spk-disabled",
+        name="Garage Speaker",
+        ip_address="192.168.1.57",
+        auth_token="auth-disabled",
+    )
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance", AsyncMock()),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
+    ):
+        coord_inst = mock_coord_cls.return_value
+        coord_inst.async_get_speakers = AsyncMock(return_value=[spk_enabled, spk_disabled])
+
+        with patch(
+            "custom_components.google_home_bt_proxy.bluetooth.async_register_scanner",
+            return_value=MagicMock(),
+        ):
+            result = await async_setup_entry(mock_hass, mock_entry)
+            assert result is True
+            entry_data = mock_hass.data[DOMAIN][mock_entry.entry_id]
+            assert "spk-enabled" in entry_data["scanners"]
+            assert "spk-disabled" not in entry_data["scanners"]
+            assert mock_hass.async_create_background_task.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_async_unload_entry_not_found():
+    mock_hass = MagicMock()
+    mock_hass.data = {DOMAIN: {}}
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "non-existent-id"
+
+    unload_result = await async_unload_entry(mock_hass, mock_entry)
+    assert unload_result is True
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_normal_cycle():
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_SCAN_TIMEOUT: 0.01,
+        CONF_SCAN_INTERVAL: 0.01,
+        CONF_RSSI_THRESHOLD: -85,
+    }
+
+    mock_coord = MagicMock()
+    mock_coord.async_refresh_token = AsyncMock()
+
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    discovered = [
+        DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-70, name="BLE Beacon")
+    ]
+    mock_api.get_scan_results = AsyncMock(return_value=discovered)
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="token123",
+    )
+    mock_scanner = MagicMock()
+
+    loop_task = asyncio.create_task(
+        _speaker_scan_loop(
+            mock_hass,
+            mock_entry,
+            mock_coord,
+            mock_api,
+            mock_speaker,
+            mock_scanner,
+            initial_delay=0.01,
+        )
+    )
+
+    # Let the loop perform one scan cycle
+    await asyncio.sleep(0.05)
+    loop_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await loop_task
+
+    mock_api.start_scan.assert_called_with(mock_speaker, timeout=0.01)
+    mock_api.get_scan_results.assert_called_with(mock_speaker)
+    mock_scanner.process_scan_results.assert_called_with(discovered, min_rssi=-85)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_token_expired():
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+
+    mock_coord = MagicMock()
+    mock_coord.async_refresh_token = AsyncMock()
+
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(side_effect=TokenExpiredError("Token expired"))
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="old-token",
+    )
+    mock_scanner = MagicMock()
+
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        # Stop loop after one sleep call in TokenExpiredError
+        mock_sleep.side_effect = [None, asyncio.CancelledError()]
+
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+            )
+
+    mock_coord.async_refresh_token.assert_called_once_with(mock_speaker)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_connection_error_and_generic_error():
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(
+        side_effect=[
+            SpeakerConnectionError("Unreachable"),
+            RuntimeError("Unexpected error"),
+            asyncio.CancelledError(),
+        ]
+    )
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room",
+        ip_address="192.168.1.100",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+
+    with patch("asyncio.sleep", AsyncMock()):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+            )
+
+    assert mock_api.start_scan.call_count >= 2

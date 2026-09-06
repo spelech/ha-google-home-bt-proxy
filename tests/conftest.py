@@ -1,12 +1,14 @@
-"""Common fixtures for tests."""
-
+import sys
 from unittest.mock import MagicMock
 
-import pytest
-import pytest_asyncio
-from aiohttp.test_utils import TestClient, TestServer
-from habluetooth.central_manager import set_manager
-from habluetooth.manager import BluetoothManager
+# Mock homeassistant.components.usb if missing in lightweight test environment
+sys.modules.setdefault("homeassistant.components.usb", MagicMock())
+
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
+from habluetooth.central_manager import set_manager  # noqa: E402
+from habluetooth.manager import BluetoothManager  # noqa: E402
 
 
 @pytest_asyncio.fixture
