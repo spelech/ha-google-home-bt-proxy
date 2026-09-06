@@ -41,6 +41,7 @@ class SpeakerProxyState:
 
     status: str = "idle"
     total_advertisements: int = 0
+    filtered_advertisements: int = 0
     last_scan_count: int = 0
     last_scan_duration: float = 0.0
     last_scan_timestamp: float | None = None

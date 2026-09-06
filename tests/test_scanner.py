@@ -173,3 +173,49 @@ def test_process_scan_results_rssi_offset_and_clamping():
         min_rssi=-128,
     )
     assert low_clamp_scanner._async_on_advertisement.call_args[1]["rssi"] == -127  # Clamped to -127
+
+
+def test_process_scan_results_signal_processor_integration():
+    """Verify SignalProcessor filtering and enriched distance/smoothing in process_scan_results."""
+    from custom_components.google_home_bt_proxy.const import FILTER_MODE_WHITELIST
+    from custom_components.google_home_bt_proxy.filter import SignalProcessor
+
+    processor = SignalProcessor(
+        filter_mode=FILTER_MODE_WHITELIST,
+        tracked_devices=["AA:BB:CC"],
+        max_distance=5.0,
+        ref_power=-59,
+        path_loss_exponent=2.0,
+    )
+
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="spk_filtered",
+        name="Filtered Scanner",
+        signal_processor=processor,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    devices = [
+        # Device 1: Matches whitelist, within distance (~1.1m <= 5.0m) -> should inject
+        DiscoveredDevice(mac_address="AA:BB:CC:11:22:33", rssi=-60),
+        # Device 2: Matches whitelist, but distance (~19.9m > 5.0m) -> filtered
+        DiscoveredDevice(mac_address="AA:BB:CC:44:55:66", rssi=-85),
+        # Device 3: Within distance (~1.1m <= 5.0m), but not in whitelist -> filtered
+        DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-60),
+    ]
+
+    injected = scanner.process_scan_results(devices, min_rssi=-90)
+    assert injected == 1
+
+    scanner._async_on_advertisement.assert_called_once()
+    call_args = scanner._async_on_advertisement.call_args[1]
+    assert call_args["address"] == "AA:BB:CC:11:22:33"
+    assert call_args["rssi"] == -60
+
+    details = call_args["details"]
+    assert details["raw_rssi"] == -60
+    assert details["calibrated_rssi"] == -60
+    assert details["filtered_rssi"] == -60
+    assert details["estimated_distance"] is not None
+    assert details["estimated_distance"] <= 5.0
+    assert details["samples_count"] == 1

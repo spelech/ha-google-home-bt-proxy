@@ -371,7 +371,7 @@ async def test_speaker_scan_loop_playback_skip_ceiling():
 
     # Simulate two cycles: cycle 1 elapsed = 0s (skipped), cycle 2 elapsed = 130s (forced scan)
     with (
-        patch("time.monotonic", side_effect=[100.0, 230.0, 230.0, 230.0]),
+        patch("time.monotonic", side_effect=[100.0, 230.0] + [230.0] * 20),
         patch("asyncio.sleep", AsyncMock()) as mock_sleep,
     ):
         mock_sleep.side_effect = [None, None, None, asyncio.CancelledError()]
@@ -663,3 +663,26 @@ async def test_speaker_scan_loop_disabled_and_immediate_trigger():
     assert state.last_scan_count == 1
     assert state.total_advertisements == 2
     assert state.status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_async_reload_entry():
+    """Verify async_reload_entry invokes unload and setup."""
+    from custom_components.google_home_bt_proxy import async_reload_entry
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.async_unload_entry",
+            AsyncMock(return_value=True),
+        ) as mock_unload,
+        patch(
+            "custom_components.google_home_bt_proxy.async_setup_entry",
+            AsyncMock(return_value=True),
+        ) as mock_setup,
+    ):
+        await async_reload_entry(mock_hass, mock_entry)
+        mock_unload.assert_called_once_with(mock_hass, mock_entry)
+        mock_setup.assert_called_once_with(mock_hass, mock_entry)

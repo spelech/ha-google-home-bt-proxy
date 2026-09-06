@@ -18,35 +18,58 @@ from homeassistant.core import callback
 from .const import (
     CONF_ANDROID_ID,
     CONF_CUSTOM_SETTINGS,
+    CONF_FILTER_MODE,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
+    CONF_MAX_DISTANCE,
     CONF_MAX_PLAYING_SKIP_DURATION,
     CONF_OAUTH_TOKEN,
+    CONF_ORCHESTRATION_MODE,
     CONF_PASSWORD,
+    CONF_PATH_LOSS_EXPONENT,
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
+    CONF_REF_POWER,
+    CONF_RSSI_FILTER_MODE,
+    CONF_RSSI_FILTER_WINDOW,
     CONF_RSSI_OFFSET,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
     CONF_SELECTED_SPEAKER,
     CONF_SPEAKER_OVERRIDES,
+    CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_FILTER_MODE,
+    DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
+    DEFAULT_ORCHESTRATION_MODE,
+    DEFAULT_PATH_LOSS_EXPONENT,
     DEFAULT_PLAYBACK_MODE,
     DEFAULT_PLAYING_SCAN_INTERVAL,
     DEFAULT_PLAYING_SCAN_TIMEOUT,
+    DEFAULT_REF_POWER,
+    DEFAULT_RSSI_FILTER_MODE,
+    DEFAULT_RSSI_FILTER_WINDOW,
     DEFAULT_RSSI_OFFSET,
     DEFAULT_RSSI_THRESHOLD,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
     DOMAIN,
+    FILTER_MODE_ALL,
+    FILTER_MODE_KNOWN_ONLY,
+    FILTER_MODE_WHITELIST,
     GLOBAL_SETTINGS,
     MODE_IGNORE,
     MODE_SKIP_CEILING,
     MODE_THROTTLE,
     NAME,
+    ORCHESTRATION_INDEPENDENT,
+    ORCHESTRATION_ROUND_ROBIN,
+    RSSI_FILTER_EMA,
+    RSSI_FILTER_MEDIAN,
+    RSSI_FILTER_NONE,
 )
 
 if not hasattr(glocaltokens.client, "get_android_id"):
@@ -250,6 +273,10 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     default=GLOBAL_SETTINGS,
                 ): vol.In(speaker_choices),
                 vol.Optional(
+                    CONF_ORCHESTRATION_MODE,
+                    default=options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE),
+                ): vol.In([ORCHESTRATION_ROUND_ROBIN, ORCHESTRATION_INDEPENDENT]),
+                vol.Optional(
                     CONF_PLAYBACK_MODE,
                     default=options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
                 ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
@@ -283,6 +310,34 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_RSSI_OFFSET,
                     default=options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET),
                 ): vol.All(vol.Coerce(int), vol.Range(min=-30, max=30)),
+                vol.Optional(
+                    CONF_FILTER_MODE,
+                    default=options.get(CONF_FILTER_MODE, DEFAULT_FILTER_MODE),
+                ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
+                vol.Optional(
+                    CONF_TRACKED_DEVICES,
+                    default=options.get(CONF_TRACKED_DEVICES, ""),
+                ): str,
+                vol.Optional(
+                    CONF_RSSI_FILTER_MODE,
+                    default=options.get(CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE),
+                ): vol.In([RSSI_FILTER_NONE, RSSI_FILTER_MEDIAN, RSSI_FILTER_EMA]),
+                vol.Optional(
+                    CONF_RSSI_FILTER_WINDOW,
+                    default=options.get(CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+                vol.Optional(
+                    CONF_MAX_DISTANCE,
+                    default=float(options.get(CONF_MAX_DISTANCE, DEFAULT_MAX_DISTANCE)),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=50.0)),
+                vol.Optional(
+                    CONF_REF_POWER,
+                    default=options.get(CONF_REF_POWER, DEFAULT_REF_POWER),
+                ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-30)),
+                vol.Optional(
+                    CONF_PATH_LOSS_EXPONENT,
+                    default=float(options.get(CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT)),
+                ): vol.All(vol.Coerce(float), vol.Range(min=1.0, max=5.0)),
                 vol.Optional(
                     CONF_KNOWN_IRKS,
                     default=options.get(CONF_KNOWN_IRKS, ""),
@@ -372,6 +427,66 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-40)),
+                vol.Optional(
+                    CONF_RSSI_OFFSET,
+                    default=existing_overrides.get(
+                        CONF_RSSI_OFFSET,
+                        options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=-30, max=30)),
+                vol.Optional(
+                    CONF_FILTER_MODE,
+                    default=existing_overrides.get(
+                        CONF_FILTER_MODE,
+                        options.get(CONF_FILTER_MODE, DEFAULT_FILTER_MODE),
+                    ),
+                ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
+                vol.Optional(
+                    CONF_TRACKED_DEVICES,
+                    default=existing_overrides.get(
+                        CONF_TRACKED_DEVICES,
+                        options.get(CONF_TRACKED_DEVICES, ""),
+                    ),
+                ): str,
+                vol.Optional(
+                    CONF_RSSI_FILTER_MODE,
+                    default=existing_overrides.get(
+                        CONF_RSSI_FILTER_MODE,
+                        options.get(CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE),
+                    ),
+                ): vol.In([RSSI_FILTER_NONE, RSSI_FILTER_MEDIAN, RSSI_FILTER_EMA]),
+                vol.Optional(
+                    CONF_RSSI_FILTER_WINDOW,
+                    default=existing_overrides.get(
+                        CONF_RSSI_FILTER_WINDOW,
+                        options.get(CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+                vol.Optional(
+                    CONF_MAX_DISTANCE,
+                    default=float(
+                        existing_overrides.get(
+                            CONF_MAX_DISTANCE,
+                            options.get(CONF_MAX_DISTANCE, DEFAULT_MAX_DISTANCE),
+                        )
+                    ),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=50.0)),
+                vol.Optional(
+                    CONF_REF_POWER,
+                    default=existing_overrides.get(
+                        CONF_REF_POWER,
+                        options.get(CONF_REF_POWER, DEFAULT_REF_POWER),
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-30)),
+                vol.Optional(
+                    CONF_PATH_LOSS_EXPONENT,
+                    default=float(
+                        existing_overrides.get(
+                            CONF_PATH_LOSS_EXPONENT,
+                            options.get(CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT),
+                        )
+                    ),
+                ): vol.All(vol.Coerce(float), vol.Range(min=1.0, max=5.0)),
             }
         )
 

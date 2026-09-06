@@ -9,6 +9,7 @@ from custom_components.google_home_bt_proxy.const import DOMAIN
 from custom_components.google_home_bt_proxy.models import SpeakerNode, SpeakerProxyState
 from custom_components.google_home_bt_proxy.sensor import (
     GoogleHomeBtProxyAdvertisementsSensor,
+    GoogleHomeBtProxyFilteredAdvertisementsSensor,
     GoogleHomeBtProxyStatusSensor,
     async_setup_entry,
 )
@@ -54,9 +55,10 @@ async def test_sensor_setup_entry(speaker_and_state):
 
     await async_setup_entry(mock_hass, mock_entry, mock_add_entities)
 
-    assert len(added_entities) == 2
+    assert len(added_entities) == 3
     assert isinstance(added_entities[0], GoogleHomeBtProxyStatusSensor)
     assert isinstance(added_entities[1], GoogleHomeBtProxyAdvertisementsSensor)
+    assert isinstance(added_entities[2], GoogleHomeBtProxyFilteredAdvertisementsSensor)
 
 
 def test_status_sensor_properties_and_updates(speaker_and_state):
@@ -117,3 +119,16 @@ async def test_sensor_callback_subscription(speaker_and_state):
     state.notify_callbacks()
 
     sensor.async_write_ha_state.assert_not_called()
+
+
+def test_filtered_advertisements_sensor_properties_and_updates(speaker_and_state):
+    speaker, state = speaker_and_state
+    sensor = GoogleHomeBtProxyFilteredAdvertisementsSensor(speaker, state)
+
+    assert sensor.unique_id == "spk-sensor-1_advertisements_filtered"
+    assert sensor.native_value == 0
+    assert sensor.state_class == SensorStateClass.TOTAL_INCREASING
+    assert sensor.native_unit_of_measurement == "pkts"
+
+    state.filtered_advertisements = 15
+    assert sensor.native_value == 15

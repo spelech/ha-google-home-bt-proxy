@@ -20,16 +20,37 @@
 ## 🎯 Features
 
 - **Native Bluetooth Remote Scanner**: Implements `habluetooth.BaseHaRemoteScanner` to inject discovered Bluetooth advertisements directly into Home Assistant's native Bluetooth Manager.
-- **Bermuda BLE Ready & RF Calibration**: Injects live RSSI signal readings and source hardware MACs for [Bermuda BLE Trilateration](https://github.com/agittins/bermuda) room presence tracking, complete with hardware-level RSSI calibration offsets (`rssi_offset`).
+- **Advanced Signal Processing & RSSI Smoothing**: Rolling median and Exponential Moving Average (EMA) filters to reject multipath flutter, antenna bounce, and signal spikes.
+- **Log-Distance Path Loss Distance Estimation**: Dynamically estimates physical distance in meters ($d = 10^{\frac{\text{ref\_power} - \text{RSSI}}{10 \times n}}$) with customizable absorption exponents and reference power.
+- **Floor Boundary & Distance Gating**: Drop distant or cross-floor advertisements exceeding `max_distance` to eliminate adjacent-room false triggers.
+- **Ephemeral MAC Filtering & Target Whitelisting**: Three selective filtering modes (`all`, `known_only`, `whitelist`) to suppress random ephemeral MACs (RPAs) and eliminate event bus noise.
+- **Synchronized Round-Robin Scan Orchestrator**: Serializes active 2.4GHz hardware inquiry scans across multi-speaker setups to prevent packet collisions and Wi-Fi throughput drops.
 - **Autonomous Playback Protection**: Direct, standalone Cast V2 and Bluetooth A2DP audio streaming detection that automatically pauses or throttles BLE inquiry scans during active playback without coupling to Home Assistant's `media_player` entities.
 - **Hierarchical Per-Speaker Overrides**: Customize scan intervals, scan timeouts, playback modes, and RF offsets per speaker or fall back to global entry defaults.
 - **Operational Diagnostics & Controls**: First-class Home Assistant entities per speaker:
-  - `sensor.*_bluetooth_proxy_status`: Live scanning lifecycle state and packet counter attributes.
+  - `sensor.*_bluetooth_proxy_status`: Live scanning lifecycle state (`idle`, `waiting_slot`, `scanning`, `playback_throttled`, etc.).
+  - `sensor.*_bluetooth_advertisements_processed`: Monotonic counter of packets successfully injected.
+  - `sensor.*_bluetooth_advertisements_filtered`: Real-time counter of dropped packets suppressed by distance or target filters.
   - `switch.*_bluetooth_proxy`: Instantly enable or disable scanning on individual speakers.
   - `button.*_trigger_bluetooth_scan`: Manually trigger an on-demand hardware inquiry scan.
-- **Self-Healing Connection**: Automatically handles Google local authorization token renewal via `glocaltokens` and recovers from temporary Wi-Fi drops with exponential backoff.
-- **Staggered Polling**: Scans across multiple speakers are offset to minimize network spikes and maintain local speaker responsiveness.
+- **Self-Healing Connection**: Automatically handles Google local authorization token renewal via `glocal tokens` and recovers from temporary Wi-Fi drops with exponential backoff.
 - **Empirical Diagnostic Probe**: Includes `scripts/probe_speaker.py` for testing, classifying, and verifying speaker endpoints (`/setup/bluetooth/scan`, `/setup/bluetooth/scan_results`, Cast V2 socket) from the command line.
+
+---
+
+## 📸 Screenshots & UI
+
+<p align="center">
+  <img src="images/options_flow.jpg" alt="Integration Options Flow Dialog" width="700">
+  <br>
+  <em>Advanced Options Flow with Multi-Speaker Orchestration, Distance Gating, and RSSI Smoothing</em>
+</p>
+
+<p align="center">
+  <img src="images/diagnostics.jpg" alt="Device Diagnostics & Controls Card" width="600">
+  <br>
+  <em>Lovelace Device Card showing Operational Status, Processed vs Filtered Packets, Switch, and Scan Trigger</em>
+</p>
 
 ---
 
@@ -79,15 +100,22 @@ Restart Home Assistant.
 4. Once authenticated, the integration discovers all Google Home and Nest speakers on your local network and registers a Bluetooth scanner proxy for each enabled speaker.
 
 #### Configuration Options
-Access **Configure** on the integration card to adjust global defaults or configure specific speakers:
-- **Configure Specific Speaker**: Select any speaker to customize its individual parameters, or select `Global Defaults` to set entry-wide behavior.
+Access **Configure** on the integration card to adjust global defaults or configure specific speakers (see [Signal Processing Technical Guide](docs/signal_processing.md) for formulas and calibration guidelines):
+- **Configure Specific Speaker**: Select any speaker to customize its individual parameters, or select `Global Settings` to set integration-wide defaults.
+- **Multi-Speaker Orchestration** (`orchestration_mode`): Serializes active hardware scans across speakers using `round_robin` to eliminate 2.4GHz Wi-Fi/BT inquiry contention, or `independent` (default: `round_robin`).
 - **Hardware Scan Duration** (`scan_timeout`): Duration in seconds for each active inquiry scan on the speaker (default: `5s`).
 - **Interval Between Scans** (`scan_interval`): Cooldown pause between scans (default: `10s`).
 - **Minimum RSSI Threshold** (`rssi_threshold`): Discards weak or fringe signals below this dBm value (default: `-90 dBm`).
-- **Bermuda RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied before injecting packets into Bermuda (default: `0 dBm`).
-- **Playback Mode** (`playback_mode`): Action during active media playback: `pause` scanning entirely, `throttle` interval, or `ignore` (default: `pause`).
-- **Playback Throttle Interval** (`playback_threshold`): Multiplier / interval used when playback mode is set to throttle (default: `30s`).
-- **Initial Delay** (`initial_delay`): Startup jitter offset to prevent simultaneous scanning spikes across multiple speakers (default: `0s`).
+- **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied before smoothing and distance estimation (default: `0 dBm`).
+- **Target Filter Mode** (`filter_mode`): Selective ingestion mode: `all`, `known_only` (named or IRK-resolved devices), or `whitelist` (default: `all`).
+- **Tracked Devices** (`tracked_devices`): Comma-separated list of MAC addresses, OUI prefixes (e.g. `AA:BB:CC`), or name substrings (e.g. `Beacon`, `Tile`).
+- **RSSI Smoothing Algorithm** (`rssi_filter_mode`): Multi-sample algorithm: `none`, `median` (recommended for outlier rejection), or `ema` (default: `median`).
+- **Smoothing Window Size** (`rssi_filter_window`): Number of historical samples retained for smoothing (default: `3`).
+- **Maximum Distance Cutoff** (`max_distance`): Boundary threshold in meters. Advertisements estimated beyond this distance are dropped to prevent cross-room/floor bleed (`0.0` disables cutoff, default: `0.0m`).
+- **Reference RSSI at 1 Meter** (`ref_power`): Expected signal strength in dBm at 1m line-of-sight for distance estimation (default: `-59 dBm`).
+- **Path Loss Exponent** (`path_loss_exponent`): Environmental RF absorption factor $n$ (`2.0` = free space, `2.5 - 3.5` = indoor walls, default: `2.5`).
+- **Playback Mode** (`playback_mode`): Action during active media playback: `throttle` interval, `skip_ceiling`, or `ignore` (default: `throttle`).
+- **Known IRKs** (`known_irks`): Resolves iOS/macOS/watchOS private resolvable addresses (format: `name:hex_key`, one per line).
 
 ---
 
