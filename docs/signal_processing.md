@@ -56,6 +56,9 @@ $$\text{RSSI}_{\text{smoothed}, t} = \alpha \cdot \text{RSSI}_{t} + (1 - \alpha)
 ### Sample Age Expiration
 RSSI observations older than 60 seconds are automatically pruned from the window buffer to guarantee that stale data does not artificially delay presence departure detection.
 
+### Disabling Smoothing (`enable_rssi_smoothing`)
+Users can toggle RSSI smoothing off globally or per-speaker. When `enable_rssi_smoothing` is disabled (`false`), raw calibrated RSSI values are passed directly to downstream consumers without historical sample buffering or averaging.
+
 ---
 
 ## 3. Log-Distance Path Loss Model & Distance Estimation
@@ -68,6 +71,7 @@ $$d = 10^{\left(\frac{\text{ref\_power} - \text{RSSI}_{\text{smoothed}}}{10 \cdo
 
 | Parameter | Configuration Key | Default | Description |
 |---|---|---|---|
+| **Enable Distance Estimation** | `enable_distance_estimation` | `true` | Toggle log-distance calculation and distance cutoff gating on/off. When `false`, `estimated_distance` is omitted (`None`) and `max_distance` filtering is bypassed. |
 | **Reference Power** | `ref_power` | `-59 dBm` | Expected RSSI at exactly 1 meter distance in line-of-sight. |
 | **Path Loss Exponent** | `path_loss_exponent` | `2.5` | Environmental RF attenuation rate ($n$). |
 | **Max Distance Cutoff** | `max_distance` | `0.0 m` (Disabled) | Boundary threshold. Advertisements detected beyond this distance are dropped. |

@@ -31,6 +31,8 @@ CONF_CUSTOM_SETTINGS: Final = "custom_settings"
 GLOBAL_SETTINGS: Final = "global"
 
 # Filter & Signal Processing Keys
+CONF_ENABLE_RSSI_SMOOTHING: Final = "enable_rssi_smoothing"
+CONF_ENABLE_DISTANCE_ESTIMATION: Final = "enable_distance_estimation"
 CONF_FILTER_MODE: Final = "filter_mode"
 CONF_TRACKED_DEVICES: Final = "tracked_devices"
 CONF_RSSI_FILTER_MODE: Final = "rssi_filter_mode"
@@ -68,6 +70,8 @@ DEFAULT_PLAYING_SCAN_INTERVAL: Final = 30  # seconds between scans during playba
 DEFAULT_MAX_PLAYING_SKIP_DURATION: Final = 120  # seconds maximum continuous skip before forced scan
 DEFAULT_RSSI_THRESHOLD: Final = -90  # dBm
 DEFAULT_RSSI_OFFSET: Final = 0  # dBm calibration offset
+DEFAULT_ENABLE_RSSI_SMOOTHING: Final = True
+DEFAULT_ENABLE_DISTANCE_ESTIMATION: Final = True
 DEFAULT_FILTER_MODE: Final = FILTER_MODE_ALL
 DEFAULT_RSSI_FILTER_MODE: Final = RSSI_FILTER_MEDIAN
 DEFAULT_RSSI_FILTER_WINDOW: Final = 3

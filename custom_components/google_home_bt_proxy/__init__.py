@@ -20,6 +20,8 @@ from .auth_view import GoogleHomeBtProxyAuthCallbackView
 from .const import (
     CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
+    CONF_ENABLE_DISTANCE_ESTIMATION,
+    CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
@@ -41,6 +43,8 @@ from .const import (
     CONF_SPEAKER_OVERRIDES,
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+    DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
@@ -144,6 +148,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entry, speaker.device_id, CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT
             )
         )
+        enable_rssi_smoothing = bool(
+            _get_speaker_setting(
+                entry,
+                speaker.device_id,
+                CONF_ENABLE_RSSI_SMOOTHING,
+                DEFAULT_ENABLE_RSSI_SMOOTHING,
+            )
+        )
         smoothing_mode = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE
         )
@@ -152,14 +164,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 entry, speaker.device_id, CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW
             )
         )
+        enable_distance_estimation = bool(
+            _get_speaker_setting(
+                entry,
+                speaker.device_id,
+                CONF_ENABLE_DISTANCE_ESTIMATION,
+                DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+            )
+        )
 
         signal_processor = SignalProcessor(
             filter_mode=filter_mode,
             tracked_devices=tracked_devices,
+            enable_distance_estimation=enable_distance_estimation,
             max_distance=max_distance,
             ref_power=ref_power,
             path_loss_exponent=path_loss_exponent,
             rssi_offset=speaker_rssi_offset,
+            enable_rssi_smoothing=enable_rssi_smoothing,
             smoothing_mode=smoothing_mode,
             smoothing_window=smoothing_window,
         )
@@ -335,12 +357,28 @@ async def _speaker_scan_loop(
                     entry, speaker.device_id, CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT
                 )
             )
+            sp.enable_rssi_smoothing = bool(
+                _get_speaker_setting(
+                    entry,
+                    speaker.device_id,
+                    CONF_ENABLE_RSSI_SMOOTHING,
+                    DEFAULT_ENABLE_RSSI_SMOOTHING,
+                )
+            )
             sp.smoother.mode = _get_speaker_setting(
                 entry, speaker.device_id, CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE
             )
             sp.smoother.window_size = int(
                 _get_speaker_setting(
                     entry, speaker.device_id, CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW
+                )
+            )
+            sp.enable_distance_estimation = bool(
+                _get_speaker_setting(
+                    entry,
+                    speaker.device_id,
+                    CONF_ENABLE_DISTANCE_ESTIMATION,
+                    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
                 )
             )
 

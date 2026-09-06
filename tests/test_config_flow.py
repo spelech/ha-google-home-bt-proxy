@@ -481,6 +481,8 @@ async def test_options_flow_speaker_overrides():
 async def test_options_flow_signal_processing_and_orchestration():
     """Verify options flow allows configuring signal processing and orchestration settings."""
     from custom_components.google_home_bt_proxy.const import (
+        CONF_ENABLE_DISTANCE_ESTIMATION,
+        CONF_ENABLE_RSSI_SMOOTHING,
         CONF_FILTER_MODE,
         CONF_MAX_DISTANCE,
         CONF_ORCHESTRATION_MODE,
@@ -511,8 +513,10 @@ async def test_options_flow_signal_processing_and_orchestration():
     assert CONF_ORCHESTRATION_MODE in schema_keys
     assert CONF_FILTER_MODE in schema_keys
     assert CONF_TRACKED_DEVICES in schema_keys
+    assert CONF_ENABLE_RSSI_SMOOTHING in schema_keys
     assert CONF_RSSI_FILTER_MODE in schema_keys
     assert CONF_RSSI_FILTER_WINDOW in schema_keys
+    assert CONF_ENABLE_DISTANCE_ESTIMATION in schema_keys
     assert CONF_MAX_DISTANCE in schema_keys
     assert CONF_REF_POWER in schema_keys
     assert CONF_PATH_LOSS_EXPONENT in schema_keys
@@ -523,8 +527,10 @@ async def test_options_flow_signal_processing_and_orchestration():
         CONF_ORCHESTRATION_MODE: ORCHESTRATION_INDEPENDENT,
         CONF_FILTER_MODE: FILTER_MODE_WHITELIST,
         CONF_TRACKED_DEVICES: "AA:BB:CC,Beacon",
+        CONF_ENABLE_RSSI_SMOOTHING: False,
         CONF_RSSI_FILTER_MODE: RSSI_FILTER_EMA,
         CONF_RSSI_FILTER_WINDOW: 5,
+        CONF_ENABLE_DISTANCE_ESTIMATION: False,
         CONF_MAX_DISTANCE: 7.5,
         CONF_REF_POWER: -62,
         CONF_PATH_LOSS_EXPONENT: 2.8,
@@ -534,8 +540,10 @@ async def test_options_flow_signal_processing_and_orchestration():
     assert result["data"][CONF_ORCHESTRATION_MODE] == ORCHESTRATION_INDEPENDENT
     assert result["data"][CONF_FILTER_MODE] == FILTER_MODE_WHITELIST
     assert result["data"][CONF_TRACKED_DEVICES] == "AA:BB:CC,Beacon"
+    assert result["data"][CONF_ENABLE_RSSI_SMOOTHING] is False
     assert result["data"][CONF_RSSI_FILTER_MODE] == RSSI_FILTER_EMA
     assert result["data"][CONF_RSSI_FILTER_WINDOW] == 5
+    assert result["data"][CONF_ENABLE_DISTANCE_ESTIMATION] is False
     assert result["data"][CONF_MAX_DISTANCE] == 7.5
     assert result["data"][CONF_REF_POWER] == -62
     assert result["data"][CONF_PATH_LOSS_EXPONENT] == 2.8

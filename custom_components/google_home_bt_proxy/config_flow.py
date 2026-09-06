@@ -18,6 +18,8 @@ from homeassistant.core import callback
 from .const import (
     CONF_ANDROID_ID,
     CONF_CUSTOM_SETTINGS,
+    CONF_ENABLE_DISTANCE_ESTIMATION,
+    CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
@@ -41,6 +43,8 @@ from .const import (
     CONF_SPEAKER_OVERRIDES,
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+    DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
@@ -319,6 +323,10 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     default=options.get(CONF_TRACKED_DEVICES, ""),
                 ): str,
                 vol.Optional(
+                    CONF_ENABLE_RSSI_SMOOTHING,
+                    default=options.get(CONF_ENABLE_RSSI_SMOOTHING, DEFAULT_ENABLE_RSSI_SMOOTHING),
+                ): bool,
+                vol.Optional(
                     CONF_RSSI_FILTER_MODE,
                     default=options.get(CONF_RSSI_FILTER_MODE, DEFAULT_RSSI_FILTER_MODE),
                 ): vol.In([RSSI_FILTER_NONE, RSSI_FILTER_MEDIAN, RSSI_FILTER_EMA]),
@@ -326,6 +334,12 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_RSSI_FILTER_WINDOW,
                     default=options.get(CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW),
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+                vol.Optional(
+                    CONF_ENABLE_DISTANCE_ESTIMATION,
+                    default=options.get(
+                        CONF_ENABLE_DISTANCE_ESTIMATION, DEFAULT_ENABLE_DISTANCE_ESTIMATION
+                    ),
+                ): bool,
                 vol.Optional(
                     CONF_MAX_DISTANCE,
                     default=float(options.get(CONF_MAX_DISTANCE, DEFAULT_MAX_DISTANCE)),
@@ -449,6 +463,13 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 ): str,
                 vol.Optional(
+                    CONF_ENABLE_RSSI_SMOOTHING,
+                    default=existing_overrides.get(
+                        CONF_ENABLE_RSSI_SMOOTHING,
+                        options.get(CONF_ENABLE_RSSI_SMOOTHING, DEFAULT_ENABLE_RSSI_SMOOTHING),
+                    ),
+                ): bool,
+                vol.Optional(
                     CONF_RSSI_FILTER_MODE,
                     default=existing_overrides.get(
                         CONF_RSSI_FILTER_MODE,
@@ -462,6 +483,15 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         options.get(CONF_RSSI_FILTER_WINDOW, DEFAULT_RSSI_FILTER_WINDOW),
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+                vol.Optional(
+                    CONF_ENABLE_DISTANCE_ESTIMATION,
+                    default=existing_overrides.get(
+                        CONF_ENABLE_DISTANCE_ESTIMATION,
+                        options.get(
+                            CONF_ENABLE_DISTANCE_ESTIMATION, DEFAULT_ENABLE_DISTANCE_ESTIMATION
+                        ),
+                    ),
+                ): bool,
                 vol.Optional(
                     CONF_MAX_DISTANCE,
                     default=float(

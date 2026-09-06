@@ -109,8 +109,10 @@ Access **Configure** on the integration card to adjust global defaults or config
 - **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied before smoothing and distance estimation (default: `0 dBm`).
 - **Target Filter Mode** (`filter_mode`): Selective ingestion mode: `all`, `known_only` (named or IRK-resolved devices), or `whitelist` (default: `all`).
 - **Tracked Devices** (`tracked_devices`): Comma-separated list of MAC addresses, OUI prefixes (e.g. `AA:BB:CC`), or name substrings (e.g. `Beacon`, `Tile`).
+- **Enable RSSI Smoothing** (`enable_rssi_smoothing`): Toggle multi-sample smoothing on/off (default: `true`). When disabled, raw calibrated RSSI is emitted without buffer averaging.
 - **RSSI Smoothing Algorithm** (`rssi_filter_mode`): Multi-sample algorithm: `none`, `median` (recommended for outlier rejection), or `ema` (default: `median`).
 - **Smoothing Window Size** (`rssi_filter_window`): Number of historical samples retained for smoothing (default: `3`).
+- **Enable Distance Estimation** (`enable_distance_estimation`): Toggle log-distance path loss distance calculations on/off (default: `true`). When disabled, distance calculations and boundary cutoffs are bypassed.
 - **Maximum Distance Cutoff** (`max_distance`): Boundary threshold in meters. Advertisements estimated beyond this distance are dropped to prevent cross-room/floor bleed (`0.0` disables cutoff, default: `0.0m`).
 - **Reference RSSI at 1 Meter** (`ref_power`): Expected signal strength in dBm at 1m line-of-sight for distance estimation (default: `-59 dBm`).
 - **Path Loss Exponent** (`path_loss_exponent`): Environmental RF absorption factor $n$ (`2.0` = free space, `2.5 - 3.5` = indoor walls, default: `2.5`).

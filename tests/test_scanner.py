@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+from custom_components.google_home_bt_proxy.filter import SignalProcessor
 from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerNode
 from custom_components.google_home_bt_proxy.scanner import GoogleHomeRemoteScanner
 
@@ -218,4 +219,31 @@ def test_process_scan_results_signal_processor_integration():
     assert details["filtered_rssi"] == -60
     assert details["estimated_distance"] is not None
     assert details["estimated_distance"] <= 5.0
+    assert details["samples_count"] == 1
+
+
+def test_scanner_with_signal_processor_disabled_features():
+    """Verify scanner details contain None for estimated_distance when disabled."""
+    proc = SignalProcessor(
+        enable_rssi_smoothing=False,
+        enable_distance_estimation=False,
+        rssi_offset=4,
+    )
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="test_disabled_features",
+        name="Disabled Features Scanner",
+        signal_processor=proc,
+    )
+    scanner._async_on_advertisement = MagicMock()
+
+    device = DiscoveredDevice(mac_address="AA:BB:CC:DD:EE:FF", rssi=-70)
+    injected = scanner.process_scan_results([device], min_rssi=-90)
+    assert injected == 1
+
+    call_args = scanner._async_on_advertisement.call_args[1]
+    details = call_args["details"]
+    assert details["raw_rssi"] == -70
+    assert details["calibrated_rssi"] == -66
+    assert details["filtered_rssi"] == -66
+    assert details["estimated_distance"] is None
     assert details["samples_count"] == 1

@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .const import (
+    DEFAULT_ENABLE_DISTANCE_ESTIMATION,
+    DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_PATH_LOSS_EXPONENT,
     DEFAULT_REF_POWER,
     DEFAULT_RSSI_FILTER_MODE,
@@ -57,7 +59,7 @@ class ProcessedSignal:
     filtered_rssi: int
     raw_rssi: int
     calibrated_rssi: int
-    estimated_distance: float
+    estimated_distance: float | None
     is_allowed: bool
     filter_reason: str | None = None
     samples_count: int = 1
@@ -129,10 +131,12 @@ class SignalProcessor:
         self,
         filter_mode: str = FILTER_MODE_ALL,
         tracked_devices: list[str] | set[str] | None = None,
+        enable_distance_estimation: bool = DEFAULT_ENABLE_DISTANCE_ESTIMATION,
         max_distance: float = 0.0,
         ref_power: int = DEFAULT_REF_POWER,
         path_loss_exponent: float = DEFAULT_PATH_LOSS_EXPONENT,
         rssi_offset: int = 0,
+        enable_rssi_smoothing: bool = DEFAULT_ENABLE_RSSI_SMOOTHING,
         smoothing_mode: str = DEFAULT_RSSI_FILTER_MODE,
         smoothing_window: int = DEFAULT_RSSI_FILTER_WINDOW,
     ) -> None:
@@ -141,10 +145,12 @@ class SignalProcessor:
         self.tracked_devices: set[str] = (
             {d.strip().upper() for d in tracked_devices if d.strip()} if tracked_devices else set()
         )
+        self.enable_distance_estimation = enable_distance_estimation
         self.max_distance = max(0.0, max_distance)
         self.ref_power = ref_power
         self.path_loss_exponent = path_loss_exponent
         self.rssi_offset = rssi_offset
+        self.enable_rssi_smoothing = enable_rssi_smoothing
         self.smoother = RssiSmoothingFilter(mode=smoothing_mode, window_size=smoothing_window)
 
     def process(
@@ -158,30 +164,37 @@ class SignalProcessor:
         # Apply hardware calibration offset and clamp to [-127, 0] dBm
         calibrated_rssi = max(-127, min(0, raw_rssi + self.rssi_offset))
 
-        # Apply multi-sample RSSI smoothing
-        smoothed_rssi, samples_count = self.smoother.filter(
-            device.mac_address, calibrated_rssi, now=now
-        )
-        smoothed_rssi = max(-127, min(0, smoothed_rssi))
+        # Apply multi-sample RSSI smoothing if enabled
+        if self.enable_rssi_smoothing:
+            smoothed_rssi, samples_count = self.smoother.filter(
+                device.mac_address, calibrated_rssi, now=now
+            )
+            smoothed_rssi = max(-127, min(0, smoothed_rssi))
+        else:
+            smoothed_rssi = calibrated_rssi
+            samples_count = 1
 
-        # Calculate estimated distance
-        dist = calculate_distance(
-            smoothed_rssi,
-            ref_power=self.ref_power,
-            path_loss_exponent=self.path_loss_exponent,
-        )
+        # Calculate estimated distance if enabled
+        dist: float | None = None
+        if self.enable_distance_estimation:
+            dist = calculate_distance(
+                smoothed_rssi,
+                ref_power=self.ref_power,
+                path_loss_exponent=self.path_loss_exponent,
+            )
 
         # 1. Check distance cutoff
-        if self.max_distance > 0.0 and dist > self.max_distance:
-            return ProcessedSignal(
-                filtered_rssi=smoothed_rssi,
-                raw_rssi=raw_rssi,
-                calibrated_rssi=calibrated_rssi,
-                estimated_distance=dist,
-                is_allowed=False,
-                filter_reason=f"Exceeds max distance ({dist}m > {self.max_distance}m)",
-                samples_count=samples_count,
-            )
+        if self.enable_distance_estimation and self.max_distance > 0.0 and dist is not None:
+            if dist > self.max_distance:
+                return ProcessedSignal(
+                    filtered_rssi=smoothed_rssi,
+                    raw_rssi=raw_rssi,
+                    calibrated_rssi=calibrated_rssi,
+                    estimated_distance=dist,
+                    is_allowed=False,
+                    filter_reason=f"Exceeds max distance ({dist}m > {self.max_distance}m)",
+                    samples_count=samples_count,
+                )
 
         # 2. Check target whitelist / filter mode
         is_allowed, reason = self._check_target_allowed(device, resolved_identity)

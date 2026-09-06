@@ -293,3 +293,65 @@ def test_signal_processor_unknown_modes_and_empty_tracked():
     # Unknown filter mode falls back to allowed
     proc_unknown = SignalProcessor(filter_mode="unknown_filter_mode")
     assert proc_unknown.process(dev).is_allowed is True
+
+
+def test_signal_processor_smoothing_disabled():
+    """Verify raw/calibrated RSSI is returned without smoothing when disabled."""
+    proc = SignalProcessor(
+        enable_rssi_smoothing=False,
+        smoothing_mode="median",
+        smoothing_window=5,
+        rssi_offset=2,
+    )
+    dev = DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-75)
+
+    # First packet
+    res1 = proc.process(dev)
+    assert res1.raw_rssi == -75
+    assert res1.calibrated_rssi == -73
+    assert res1.filtered_rssi == -73
+    assert res1.samples_count == 1
+
+    # Second packet with a big jump - should NOT be smoothed
+    dev2 = DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-50)
+    res2 = proc.process(dev2)
+    assert res2.raw_rssi == -50
+    assert res2.calibrated_rssi == -48
+    assert res2.filtered_rssi == -48
+    assert res2.samples_count == 1
+
+
+def test_signal_processor_distance_estimation_disabled():
+    """Verify estimated_distance is None and max_distance cutoff is skipped when disabled."""
+    # Even if max_distance is 2.0m, disabling distance estimation bypasses distance filtering
+    proc = SignalProcessor(
+        enable_distance_estimation=False,
+        max_distance=2.0,
+        ref_power=-59,
+        path_loss_exponent=2.0,
+    )
+    # dev with -90 dBm would be ~35m away if calculated
+    dev = DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-90)
+
+    res = proc.process(dev)
+    assert res.estimated_distance is None
+    assert res.is_allowed is True
+    assert res.filter_reason is None
+
+
+def test_signal_processor_all_processing_disabled():
+    """Verify processor behavior when both smoothing and distance estimation are disabled."""
+    proc = SignalProcessor(
+        enable_rssi_smoothing=False,
+        enable_distance_estimation=False,
+        max_distance=5.0,
+    )
+    dev = DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-85)
+
+    res = proc.process(dev)
+    assert res.raw_rssi == -85
+    assert res.calibrated_rssi == -85
+    assert res.filtered_rssi == -85
+    assert res.samples_count == 1
+    assert res.estimated_distance is None
+    assert res.is_allowed is True
