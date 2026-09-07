@@ -85,11 +85,32 @@ if not hasattr(glocaltokens.client, "get_android_id"):
 _LOGGER = logging.getLogger(__name__)
 
 
+INVISIBLE_CHARS_PATTERN = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u2060\u202a-\u202e]")
+
+
+def clean_string(val: Any) -> str:
+    """Strip whitespace, zero-width spaces, and invisible characters from user input."""
+    if not val or not isinstance(val, str):
+        return ""
+    cleaned = INVISIBLE_CHARS_PATTERN.sub("", val)
+    return cleaned.strip()
+
+
+def clean_password(pwd: Any) -> str:
+    """Clean password input, removing spaces if matching Google App Password format."""
+    cleaned = clean_string(pwd)
+    # If user copied a 16-character Google App Password with standard 4-char chunk spacing
+    # (e.g. 'abcd efgh ijkl mnop')
+    if re.match(r"^([a-zA-Z0-9]{4}\s+){3}[a-zA-Z0-9]{4}$", cleaned):
+        cleaned = re.sub(r"\s+", "", cleaned)
+    return cleaned
+
+
 def sanitize_token(token: str) -> str:
     """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
     if not token or not isinstance(token, str):
         return ""
-    token = token.strip()
+    token = clean_string(token)
     # Check for oauth2_4 token embedded in cookie string or key-value pair
     match_oauth = re.search(r"(oauth2_4/[^\s\"';,]+)", token)
     if match_oauth:
@@ -100,7 +121,7 @@ def sanitize_token(token: str) -> str:
         return match_master.group(1)
     # Fallback stripping of common key prefixes and surrounding quotes
     token = re.sub(r"^(?:oauth_token|master_token)\s*[:=]\s*", "", token, flags=re.IGNORECASE)
-    token = token.strip().strip("\"'").strip(";").strip()
+    token = clean_string(token).strip("\"'").strip(";").strip()
     return token
 
 
@@ -126,7 +147,10 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_ANDROID_ID,
         ):
             if key in user_input and isinstance(user_input[key], str):
-                user_input[key] = user_input[key].strip()
+                user_input[key] = clean_string(user_input[key])
+
+        if CONF_PASSWORD in user_input and isinstance(user_input[CONF_PASSWORD], str):
+            user_input[CONF_PASSWORD] = clean_password(user_input[CONF_PASSWORD])
 
         from glocaltokens.client import get_android_id  # type: ignore[attr-defined]
 
@@ -135,8 +159,8 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         master_token = sanitize_token(user_input.get(CONF_MASTER_TOKEN, ""))
         oauth_token = sanitize_token(user_input.get(CONF_OAUTH_TOKEN, ""))
-        username = user_input.get(CONF_USERNAME, "")
-        password = user_input.get(CONF_PASSWORD, "")
+        username = clean_string(user_input.get(CONF_USERNAME, ""))
+        password = clean_password(user_input.get(CONF_PASSWORD, ""))
 
         # Auto-detect if user entered an oauth token into master_token field
         if master_token.startswith("oauth2_4/"):
@@ -198,7 +222,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            self._email = user_input.get(CONF_USERNAME, "").strip()
+            self._email = clean_string(user_input.get(CONF_USERNAME, ""))
             try:
                 valid = await self._validate_credentials(user_input)
                 if valid:
@@ -247,7 +271,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not user_input.get(CONF_USERNAME) and self._email:
                 user_input[CONF_USERNAME] = self._email
             elif user_input.get(CONF_USERNAME):
-                self._email = user_input[CONF_USERNAME].strip()
+                self._email = clean_string(user_input[CONF_USERNAME])
 
             try:
                 valid = await self._validate_credentials(user_input)

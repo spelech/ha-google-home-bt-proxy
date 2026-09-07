@@ -22,11 +22,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 _LOGGER = logging.getLogger("auth_helper")
 
 
+INVISIBLE_CHARS_PATTERN = re.compile(r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u2060\u202a-\u202e]")
+
+
+def clean_string(val: Any) -> str:
+    """Strip whitespace, zero-width spaces, and invisible characters."""
+    if not val or not isinstance(val, str):
+        return ""
+    cleaned = INVISIBLE_CHARS_PATTERN.sub("", val)
+    return cleaned.strip()
+
+
 def sanitize_token(token: str) -> str:
     """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
     if not token or not isinstance(token, str):
         return ""
-    token = token.strip()
+    token = clean_string(token)
     match_oauth = re.search(r"(oauth2_4/[^\s\"';,]+)", token)
     if match_oauth:
         return match_oauth.group(1)
@@ -34,7 +45,7 @@ def sanitize_token(token: str) -> str:
     if match_master:
         return match_master.group(1)
     token = re.sub(r"^(?:oauth_token|master_token)\s*[:=]\s*", "", token, flags=re.IGNORECASE)
-    token = token.strip().strip("\"'").strip(";").strip()
+    token = clean_string(token).strip("\"'").strip(";").strip()
     return token
 
 
@@ -70,7 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def handle_exchange(args: argparse.Namespace) -> int:
     """Handle the exchange subcommand."""
-    email: str = args.email.strip()
+    email: str = clean_string(args.email)
     oauth_token: str = sanitize_token(args.oauth_token)
     android_id: str = args.android_id or GLocalAuthenticationTokens._generate_android_id()
 
@@ -117,7 +128,7 @@ def handle_exchange(args: argparse.Namespace) -> int:
 
 def handle_verify(args: argparse.Namespace) -> int:
     """Handle the verify subcommand."""
-    email: str = args.email.strip()
+    email: str = clean_string(args.email)
     master_token: str = sanitize_token(args.master_token)
     android_id: str = args.android_id or GLocalAuthenticationTokens._generate_android_id()
 

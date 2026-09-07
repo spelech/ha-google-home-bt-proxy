@@ -292,3 +292,22 @@ def test_verify_failure_exception(capsys):
         assert code != 0
         captured = capsys.readouterr()
         assert "Auth failed" in (captured.err + captured.out)
+
+
+def test_auth_helper_clean_string_and_sanitize_token():
+    """Verify clean_string and sanitize_token handle devtools cookies and invisible chars."""
+    from scripts.auth_helper import clean_string, sanitize_token
+
+    # Invisible characters
+    assert clean_string(" \u200buser@gmail.com\ufeff ") == "user@gmail.com"
+    assert clean_string(None) == ""
+
+    # Cookie and devtools formats
+    raw_cookie = 'oauth_token:"oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."'
+    assert sanitize_token(raw_cookie) == "oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."
+
+    cookie_header = "oauth_token=oauth2_4/abc123xyz; Path=/; Domain=.google.com"
+    assert sanitize_token(cookie_header) == "oauth2_4/abc123xyz"
+
+    master_cookie = 'master_token: "aas_et/master_abc_123"'
+    assert sanitize_token(master_cookie) == "aas_et/master_abc_123"

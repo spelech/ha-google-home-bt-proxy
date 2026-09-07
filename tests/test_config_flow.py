@@ -462,6 +462,56 @@ def test_sanitize_token_formats():
     assert sanitize_token(None) == ""  # type: ignore[arg-type]
 
 
+def test_clean_string_and_clean_password():
+    """Test clean_string strips zero-width chars and clean_password strips App Password spacing."""
+    from custom_components.google_home_bt_proxy.config_flow import (
+        clean_password,
+        clean_string,
+    )
+
+    # Invisible characters: \u200b (zero-width space), \ufeff (BOM), \u200e (LTR), \u200d (ZWJ)
+    dirty_email = " \u200buser@gmail.com\ufeff "
+    assert clean_string(dirty_email) == "user@gmail.com"
+
+    dirty_token = "\u200eoauth2_4/my_secret_token\u200d\u2060"
+    assert clean_string(dirty_token) == "oauth2_4/my_secret_token"
+
+    # None and empty handling
+    assert clean_string("") == ""
+    assert clean_string(None) == ""
+
+    # Google App Password formatting: 16 chars grouped in 4s with spaces
+    app_pwd = " abcd efgh ijkl mnop "
+    assert clean_password(app_pwd) == "abcdefghijklmnop"
+
+    # App Password with zero-width spaces inside or around
+    dirty_app_pwd = "\u200babcd efgh\u200b ijkl mnop\ufeff"
+    assert clean_password(dirty_app_pwd) == "abcdefghijklmnop"
+
+    # Normal password with words should NOT be stripped of internal spaces
+    regular_pwd_with_spaces = "my secret password phrase"
+    assert clean_password(regular_pwd_with_spaces) == "my secret password phrase"
+
+
+@pytest.mark.asyncio
+async def test_validate_credentials_cleans_all_inputs():
+    """Verify _validate_credentials cleans whitespace, zero-width chars, and app password spaces."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow.hass = MagicMock()
+
+    user_input = {
+        CONF_USERNAME: " \u200buser@gmail.com \ufeff",
+        CONF_MASTER_TOKEN: ' \u200e master_token: "aas_et/secret_master" \u200d ',
+        CONF_ANDROID_ID: " 0a48ee4bd1bb6222 ",
+    }
+
+    result = await flow._validate_credentials(user_input)
+    assert result is True
+    assert user_input[CONF_USERNAME] == "user@gmail.com"
+    assert user_input[CONF_MASTER_TOKEN] == "aas_et/secret_master"
+    assert user_input[CONF_ANDROID_ID] == "0a48ee4bd1bb6222"
+
+
 @pytest.mark.asyncio
 async def test_config_flow_step_token_success_with_devtools_format():
     """Test step_token cleans devtools format cookie and creates entry."""

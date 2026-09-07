@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-09-07
+
+### Improved
+- **Clipboard & Copy-Paste Trimming**:
+  - Automatically scrubs zero-width spaces (`\u200b`, `\u200c`, `\u200d`), byte-order marks (`\ufeff`), directional formatting characters (`\u200e`, `\u200f`), and word joiners (`\u2060`) often invisibly copied from web browsers, DevTools, or rich text editors.
+  - Automatically detects 16-character Google App Passwords copied with standard 4x4 grouping spaces (`"abcd efgh ijkl mnop"`) and strips spaces to prevent avoidable authentication failures.
+  - Trims leading and trailing whitespace across all credentials, usernames, and tokens in both the Home Assistant config/token flows and the standalone `auth_helper` CLI.
+
 ## [1.0.3] - 2026-09-07
 
 ### Improved
