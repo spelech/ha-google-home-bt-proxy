@@ -639,7 +639,6 @@ async def test_speaker_scan_loop_disabled_and_immediate_trigger():
     state = SpeakerProxyState(enabled=False)
 
     with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
-
         call_count = 0
 
         def sleep_side_effect(duration):

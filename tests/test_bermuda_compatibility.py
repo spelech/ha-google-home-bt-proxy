@@ -412,10 +412,12 @@ async def test_options_flow_bermuda_mode_configuration():
     assert CONF_FILTER_PEER_PROXIES in schema_keys
 
     # Save options with Bermuda mode enabled
-    res_save = await handler.async_step_init({
-        CONF_BERMUDA_MODE: True,
-        CONF_FILTER_PEER_PROXIES: True,
-    })
+    res_save = await handler.async_step_init(
+        {
+            CONF_BERMUDA_MODE: True,
+            CONF_FILTER_PEER_PROXIES: True,
+        }
+    )
     assert res_save["type"] == "create_entry"
     assert res_save["data"][CONF_BERMUDA_MODE] is True
     assert res_save["data"][CONF_FILTER_PEER_PROXIES] is True

@@ -141,9 +141,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for index, speaker in enumerate(active_speakers):
         speaker_bermuda_mode = bool(
-            _get_speaker_setting(
-                entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda
-            )
+            _get_speaker_setting(entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda)
         )
         speaker_filter_peer_proxies = bool(
             _get_speaker_setting(
@@ -385,9 +383,7 @@ async def _speaker_scan_loop(
         is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
         default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
         speaker_bermuda_mode = bool(
-            _get_speaker_setting(
-                entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda
-            )
+            _get_speaker_setting(entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda)
         )
         speaker_filter_peer_proxies = bool(
             _get_speaker_setting(
@@ -432,9 +428,7 @@ async def _speaker_scan_loop(
 
             if state is not None:
                 state.rssi_mode = (
-                    "raw"
-                    if (speaker_bermuda_mode or not sp.enable_rssi_smoothing)
-                    else "smoothed"
+                    "raw" if (speaker_bermuda_mode or not sp.enable_rssi_smoothing) else "smoothed"
                 )
 
             sp.filter_mode = _get_speaker_setting(
