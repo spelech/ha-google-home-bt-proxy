@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-07
+
+### Added
+- **Categorized Options Flow Hub Menu**:
+  - Replaced the single flat 20+ field form with a clean, high-level Hub Menu (`async_show_menu`) providing dedicated navigation to:
+    - ⏱️ **Scanning & Bermuda Mode**: Core mode toggles, peer proxy suppression, and inquiry timing.
+    - 🎵 **Media Playback Handling**: Playback mode (throttle, skip ceiling, ignore) and streaming timers.
+    - 📡 **Signal Processing & RF**: Standalone signal smoothing, calibration offsets, and distance modeling.
+    - 🔒 **Target Filtering & IRK Resolvers**: Filter modes, device whitelists, RSSI thresholds, and Apple/macOS IRK keys.
+    - 🔊 **Speaker-Specific Overrides**: Tailored per-speaker overrides with an identical clean categorized structure.
+- **Adaptive Bermuda Mode Auto-Hide**:
+  - When Bermuda Optimization Mode is active (globally or for a specific speaker), the Signal Processing menu dynamically hides all 8 bypassed RF/calibration inputs (`rssi_offset`, `enable_rssi_smoothing`, `rssi_filter_mode`, `rssi_filter_window`, `enable_distance_estimation`, `max_distance`, `ref_power`, `path_loss_exponent`).
+  - Renders a helpful informational notice explaining that Bermuda natively manages smoothing, antenna offsets, and trilateration, preventing user confusion.
+
 ## [1.1.0] - 2026-09-07
 
 ### Added
