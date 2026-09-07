@@ -110,6 +110,8 @@ If Google rejects your login (`invalid_auth` or `BadAuthentication`):
    - Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`).
    - In Home Assistant, enter your Google email and paste that token directly into the **Master Token** field. The integration will automatically exchange it for a permanent master token.
 
+For a detailed step-by-step walkthrough with visual diagrams and screenshots, see the [Authentication Guide](docs/authentication_guide.md).
+
 ### Configuration Options
 
 Click **Configure** on the integration card to adjust settings globally or for specific speakers:
