@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 from collections.abc import Sequence
 from typing import Any
@@ -19,6 +20,22 @@ from glocaltokens.client import GLocalAuthenticationTokens
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 _LOGGER = logging.getLogger("auth_helper")
+
+
+def sanitize_token(token: str) -> str:
+    """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
+    if not token or not isinstance(token, str):
+        return ""
+    token = token.strip()
+    match_oauth = re.search(r"(oauth2_4/[^\s\"';,]+)", token)
+    if match_oauth:
+        return match_oauth.group(1)
+    match_master = re.search(r"((?:aas_et|oauth2_rt)/[^\s\"';,]+)", token)
+    if match_master:
+        return match_master.group(1)
+    token = re.sub(r"^(?:oauth_token|master_token)\s*[:=]\s*", "", token, flags=re.IGNORECASE)
+    token = token.strip().strip("\"'").strip(";").strip()
+    return token
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,8 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def handle_exchange(args: argparse.Namespace) -> int:
     """Handle the exchange subcommand."""
-    email: str = args.email
-    oauth_token: str = args.oauth_token
+    email: str = args.email.strip()
+    oauth_token: str = sanitize_token(args.oauth_token)
     android_id: str = args.android_id or GLocalAuthenticationTokens._generate_android_id()
 
     try:
@@ -100,8 +117,8 @@ def handle_exchange(args: argparse.Namespace) -> int:
 
 def handle_verify(args: argparse.Namespace) -> int:
     """Handle the verify subcommand."""
-    email: str = args.email
-    master_token: str = args.master_token
+    email: str = args.email.strip()
+    master_token: str = sanitize_token(args.master_token)
     android_id: str = args.android_id or GLocalAuthenticationTokens._generate_android_id()
 
     try:

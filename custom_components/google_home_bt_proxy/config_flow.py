@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -84,6 +85,25 @@ if not hasattr(glocaltokens.client, "get_android_id"):
 _LOGGER = logging.getLogger(__name__)
 
 
+def sanitize_token(token: str) -> str:
+    """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
+    if not token or not isinstance(token, str):
+        return ""
+    token = token.strip()
+    # Check for oauth2_4 token embedded in cookie string or key-value pair
+    match_oauth = re.search(r"(oauth2_4/[^\s\"';,]+)", token)
+    if match_oauth:
+        return match_oauth.group(1)
+    # Check for aas_et / oauth2_rt master token
+    match_master = re.search(r"((?:aas_et|oauth2_rt)/[^\s\"';,]+)", token)
+    if match_master:
+        return match_master.group(1)
+    # Fallback stripping of common key prefixes and surrounding quotes
+    token = re.sub(r"^(?:oauth_token|master_token)\s*[:=]\s*", "", token, flags=re.IGNORECASE)
+    token = token.strip().strip("\"'").strip(";").strip()
+    return token
+
+
 class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Google Home Bluetooth Proxy."""
 
@@ -94,6 +114,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__()
         self._imported_data: dict[str, Any] | None = None
         self._import_checked: bool = False
+        self._email: str = ""
 
     async def _validate_credentials(self, user_input: dict[str, Any]) -> bool:
         """Verify the provided credentials or master token."""
@@ -112,8 +133,8 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         android_id = user_input.get(CONF_ANDROID_ID) or get_android_id()
         user_input[CONF_ANDROID_ID] = android_id
 
-        master_token = user_input.get(CONF_MASTER_TOKEN, "")
-        oauth_token = user_input.get(CONF_OAUTH_TOKEN, "")
+        master_token = sanitize_token(user_input.get(CONF_MASTER_TOKEN, ""))
+        oauth_token = sanitize_token(user_input.get(CONF_OAUTH_TOKEN, ""))
         username = user_input.get(CONF_USERNAME, "")
         password = user_input.get(CONF_PASSWORD, "")
 
@@ -138,6 +159,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return False
 
         if master_token:
+            user_input[CONF_MASTER_TOKEN] = master_token
             return True
 
         if username and password:
@@ -176,11 +198,15 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            self._email = user_input.get(CONF_USERNAME, "").strip()
             try:
                 valid = await self._validate_credentials(user_input)
                 if valid:
                     return self.async_create_entry(title=NAME, data=user_input)
                 errors["base"] = "invalid_auth"
+                # If password authentication failed, transition to token step
+                # so the user is not asked for the password again!
+                return await self.async_step_token(errors=errors)
             except Exception:
                 _LOGGER.exception("Unexpected exception in config flow")
                 errors["base"] = "cannot_connect"
@@ -208,6 +234,42 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             return await self.async_step_import_existing()
 
         return self._show_config_form(errors=errors)
+
+    async def async_step_token(
+        self,
+        user_input: dict[str, Any] | None = None,
+        errors: dict[str, str] | None = None,
+    ) -> ConfigFlowResult:
+        """Handle token input step when password auth failed or token is used directly."""
+        step_errors = dict(errors or {})
+
+        if user_input is not None:
+            if not user_input.get(CONF_USERNAME) and self._email:
+                user_input[CONF_USERNAME] = self._email
+            elif user_input.get(CONF_USERNAME):
+                self._email = user_input[CONF_USERNAME].strip()
+
+            try:
+                valid = await self._validate_credentials(user_input)
+                if valid:
+                    return self.async_create_entry(title=NAME, data=user_input)
+                step_errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception in token config flow")
+                step_errors["base"] = "cannot_connect"
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME, default=self._email): str,
+                vol.Required(CONF_MASTER_TOKEN): str,
+            }
+        )
+        return self.async_show_form(
+            step_id="token",
+            data_schema=schema,
+            errors=step_errors,
+            description_placeholders={"email": self._email or "your Google account"},
+        )
 
     async def async_step_import_existing(
         self, user_input: dict[str, Any] | None = None

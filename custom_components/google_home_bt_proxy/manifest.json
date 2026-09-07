@@ -13,5 +13,5 @@
     "pychromecast>=14.0.0"
   ],
   "dependencies": ["bluetooth", "zeroconf"],
-  "version": "1.0.2"
+  "version": "1.0.3"
 }

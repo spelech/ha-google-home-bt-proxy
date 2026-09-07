@@ -64,7 +64,7 @@ async def test_config_flow_invalid_auth():
     with patch.object(flow, "_validate_credentials", return_value=False):
         result = await flow.async_step_user(user_input)
         assert result["type"] == "form"
-        assert result["step_id"] == "user"
+        assert result["step_id"] == "token"
         assert result["errors"] == {"base": "invalid_auth"}
 
 
@@ -411,7 +411,7 @@ async def test_config_flow_oauth_token_exchange_failure():
     ):
         result = await flow.async_step_user(user_input)
         assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "user"
+        assert result["step_id"] == "token"
         assert result["errors"] == {"base": "invalid_auth"}
 
 
@@ -426,8 +426,104 @@ async def test_config_flow_oauth_token_missing_username():
     }
     result = await flow.async_step_user(user_input)
     assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "user"
+    assert result["step_id"] == "token"
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+def test_sanitize_token_formats():
+    """Test sanitize_token properly cleans various user input and cookie formats."""
+    from custom_components.google_home_bt_proxy.config_flow import sanitize_token
+
+    # Standard raw tokens
+    assert sanitize_token("oauth2_4/my_clean_token") == "oauth2_4/my_clean_token"
+    assert sanitize_token("aas_et/my_master_token") == "aas_et/my_master_token"
+
+    # With surrounding quotes
+    assert sanitize_token('"oauth2_4/my_clean_token"') == "oauth2_4/my_clean_token"
+    assert sanitize_token("'aas_et/my_master_token'") == "aas_et/my_master_token"
+
+    # DevTools copy formats: oauth_token:"..." or oauth_token=...
+    assert (
+        sanitize_token('oauth_token:"oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."')
+        == "oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."
+    )
+    assert (
+        sanitize_token('oauth_token: "oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."')
+        == "oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."
+    )
+    assert (
+        sanitize_token("oauth_token=oauth2_4/token123; path=/; domain=.google.com")
+        == "oauth2_4/token123"
+    )
+    assert sanitize_token('master_token: "aas_et/my_token"') == "aas_et/my_token"
+
+    # Empty / None handling
+    assert sanitize_token("") == ""
+    assert sanitize_token(None) == ""  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_config_flow_step_token_success_with_devtools_format():
+    """Test step_token cleans devtools format cookie and creates entry."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow._email = "user@gmail.com"
+    mock_hass = MagicMock()
+
+    async def _mock_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_mock_executor)
+    flow.hass = mock_hass
+
+    user_input = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_MASTER_TOKEN: 'oauth_token:"oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc..."',
+    }
+    with patch(
+        "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+        return_value={"Token": "aas_et/exchanged_token"},
+    ) as mock_exchange:
+        result = await flow.async_step_token(user_input)
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_MASTER_TOKEN] == "aas_et/exchanged_token"
+        assert result["data"][CONF_USERNAME] == "user@gmail.com"
+        mock_exchange.assert_called_once_with(
+            "user@gmail.com",
+            "oauth2_4/0ATsMZqAKzWeCE3ZmAZYkCiTQfVOc...",
+            mock_exchange.call_args[0][2],
+        )
+
+
+@pytest.mark.asyncio
+async def test_config_flow_step_token_failure_reshows_token_step():
+    """Test step_token failure re-displays the token form with errors."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    flow._email = "user@gmail.com"
+    mock_hass = MagicMock()
+
+    async def _mock_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_mock_executor)
+    flow.hass = mock_hass
+
+    user_input = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_MASTER_TOKEN: "oauth2_4/bad_token",
+    }
+    with patch(
+        "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+        return_value={"Error": "BadAuthentication"},
+    ):
+        result = await flow.async_step_token(user_input)
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "token"
+        assert result["errors"] == {"base": "invalid_auth"}
+        # Verify schema only has username and master_token (no password)
+        schema_keys = [k.schema for k in result["data_schema"].schema.keys()]
+        assert CONF_USERNAME in schema_keys
+        assert CONF_MASTER_TOKEN in schema_keys
+        assert CONF_PASSWORD not in schema_keys
 
 
 @pytest.mark.asyncio
