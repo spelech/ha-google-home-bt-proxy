@@ -86,6 +86,8 @@ class SpeakerProxyState:
     enabled: bool = True
     bermuda_mode: bool = True
     rssi_mode: str = "raw"
+    assigned_area: str | None = None
+    bermuda_area_ready: bool = False
     trigger_scan_event: asyncio.Event = field(default_factory=asyncio.Event)
     callbacks: list[Callable[[], None]] = field(default_factory=list)
 

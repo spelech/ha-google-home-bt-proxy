@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-07
+
+### Added
+- **Automatic Speaker Area Inheritance (`_resolve_speaker_area`)**:
+  - Automatically queries the Home Assistant Device Registry to detect and inherit existing Area assignments from official Google Cast or Google Home device entries, MAC connections, or friendly names.
+  - Passes `suggested_area` during device creation and retroactively updates the speaker device if previously missing an area.
+- **Dynamic Bluetooth Scanner Device Area Synchronization (`_sync_bluetooth_scanner_area`)**:
+  - Ensures the underlying Home Assistant core Bluetooth scanner device entry (`CONNECTION_BLUETOOTH`) stays in sync with the speaker's assigned Area.
+  - Monitors Area changes in `_speaker_scan_loop` on every cycle and updates entity listeners immediately when a user reassigns a speaker's room in Home Assistant.
+- **Hardware MAC Resolution at Integration Startup**:
+  - Queries `/setup/eureka_info` for all active speakers during integration initialization, resolving physical Wi-Fi/Bluetooth hardware MACs before scanner registration and peer exclusion set derivation.
+- **Bermuda Telemetry Attributes on Status Sensor**:
+  - Added `assigned_area` and `bermuda_area_ready` diagnostic attributes to `GoogleHomeBtProxyStatusSensor`.
+
+### Fixed
+- **Bermuda BLE Trilateration Scanner Disqualification**:
+  - Resolved issue where Bermuda rejected Google Home speakers from room presence contests and distance estimation due to missing Area assignments (`area_id is None`).
+  - Fixed missing hardware MAC matching between the proxy and Home Assistant's core device registry.
+
+### Documentation
+- **Bermuda Scan Result Caveats & Setup Guide**:
+  - Added comprehensive documentation in `README.md` and `docs/bermuda_calibration.md` detailing Google Home local API inquiry scan limitations: lack of raw manufacturer data / iBeacon UUID frames, and active inquiry cadence.
+  - Documented mobile device sleep/lock behavior and recommended Home Assistant Companion App BLE Transmitter configuration for 24/7 background tracking.
+  - Documented how to enable disabled-by-default `Distance to <Speaker>` entities in Home Assistant.
+  - Added step-by-step guidance on tracking rotating MAC addresses via Home Assistant's native Private BLE Device (IRK) integration.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added
