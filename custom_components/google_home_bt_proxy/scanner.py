@@ -49,6 +49,27 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         """Return the scanner's signal processor."""
         return self._signal_processor
 
+    @property
+    def discovered_device_timestamps(self) -> dict[str, float]:
+        """Return discovered device timestamps with both upper and lower case keys.
+
+        Ensures full Bermuda and Home Assistant compatibility.
+        """
+        try:
+            base = super().discovered_device_timestamps
+        except AttributeError:
+            base = self._build_discovered_device_timestamps()
+        result = dict(base)
+        for k, v in base.items():
+            result[k.upper()] = v
+            result[k.lower()] = v
+        return result
+
+    @property
+    def _discovered_device_timestamps(self) -> dict[str, float]:
+        """Deprecated property in HA >= 2025.4, kept for Bermuda and backward compatibility."""
+        return self.discovered_device_timestamps
+
     def process_scan_results(
         self,
         devices: list[DiscoveredDevice],
@@ -60,8 +81,9 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
 
         for device in devices:
             resolved_identity: str | None = None
+            device_mac = device.mac_address
             if self._irk_resolver and device.is_rpa:
-                resolved_identity = self._irk_resolver.resolve(device.mac_address)
+                resolved_identity = self._irk_resolver.resolve(device_mac)
 
             signal = self._signal_processor.process(
                 device, resolved_identity=resolved_identity, now=now
@@ -70,7 +92,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
             if not signal.is_allowed:
                 _LOGGER.debug(
                     "Skipping device %s on %s: Filtered (%s)",
-                    device.mac_address,
+                    device_mac,
                     self.name,
                     signal.filter_reason,
                 )
@@ -80,7 +102,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
                 _LOGGER.debug(
                     "Skipping device %s on %s: Filtered RSSI %d below threshold %d "
                     "(raw: %d, calibrated: %d, offset: %d)",
-                    device.mac_address,
+                    device_mac,
                     self.name,
                     signal.filtered_rssi,
                     min_rssi,
@@ -95,7 +117,7 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
             local_name = device.name or resolved_identity
 
             self._async_on_advertisement(
-                address=device.mac_address,
+                address=device_mac,
                 rssi=signal.filtered_rssi,
                 local_name=local_name,
                 service_uuids=device.service_uuids,

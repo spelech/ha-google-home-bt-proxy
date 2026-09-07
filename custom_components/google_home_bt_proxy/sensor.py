@@ -8,7 +8,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
@@ -47,6 +47,7 @@ class GoogleHomeBtProxyBaseSensor(SensorEntity):
         self._unsub_callback: Callable[[], None] | None = None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, speaker.device_id)},
+            connections={(CONNECTION_NETWORK_MAC, speaker.mac_address.lower())},
             name=speaker.name,
             manufacturer="Google",
             model=speaker.hardware,

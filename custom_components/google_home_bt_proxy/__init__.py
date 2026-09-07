@@ -12,6 +12,7 @@ from homeassistant.components import bluetooth, zeroconf
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -184,8 +185,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             smoothing_window=smoothing_window,
         )
 
+        device_registry = dr.async_get(hass)
+        speaker_device_id = speaker.device_id
+        if hasattr(device_registry, "async_get_or_create"):
+            try:
+                speaker_device = device_registry.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers={(DOMAIN, speaker.device_id)},
+                    connections={(dr.CONNECTION_NETWORK_MAC, speaker.mac_address.lower())},
+                    name=speaker.name,
+                    manufacturer="Google",
+                    model=speaker.hardware,
+                )
+                speaker_device_id = speaker_device.id
+            except Exception:
+                speaker_device_id = speaker.device_id
+
         scanner = GoogleHomeRemoteScanner(
-            scanner_id=f"google_home_{speaker.device_id}",
+            scanner_id=speaker.mac_address.upper(),
             name=f"{speaker.name} Bluetooth Proxy",
             irk_resolver=irk_resolver,
             rssi_offset=speaker_rssi_offset,
@@ -204,7 +221,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             scanner,
             source_domain=DOMAIN,
             source_model=speaker.hardware,
-            source_device_id=speaker.device_id,
+            source_config_entry_id=entry.entry_id,
+            source_device_id=speaker_device_id,
         )
         unregister_callbacks.append(unreg)
 

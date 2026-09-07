@@ -17,7 +17,7 @@ from .const import (
     HEADER_LOCAL_AUTH,
     PORT_HTTPS,
 )
-from .models import DiscoveredDevice, SpeakerNode
+from .models import DiscoveredDevice, SpeakerNode, format_or_derive_mac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -152,11 +152,41 @@ class GoogleHomeApiClient:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
                 if resp.status == 200:
                     speaker.available = True
-                    return await resp.json()
+                    data = await resp.json()
+                    if isinstance(data, dict):
+                        extracted_mac = self._extract_mac(data)
+                        if extracted_mac:
+                            speaker.mac_address = format_or_derive_mac(
+                                speaker.device_id, extracted_mac
+                            )
+                    return data if isinstance(data, dict) else {}
                 return {}
         except (aiohttp.ClientError, TimeoutError) as err:
             speaker.available = False
             raise SpeakerConnectionError(f"Connection failed to {speaker.name}: {err}") from err
+
+    @staticmethod
+    def _extract_mac(data: dict[str, Any]) -> str | None:
+        """Extract MAC address from eureka_info payload if present."""
+        if not isinstance(data, dict):
+            return None
+        if mac := data.get("mac_address"):
+            return str(mac)
+        dev_info = data.get("device_info")
+        if isinstance(dev_info, dict) and (mac := dev_info.get("mac_address")):
+            return str(mac)
+        net_info = data.get("net")
+        if isinstance(net_info, dict):
+            wlan0 = net_info.get("wlan0")
+            if isinstance(wlan0, dict) and (mac := wlan0.get("mac")):
+                return str(mac)
+            eth = net_info.get("ethernet")
+            if isinstance(eth, dict) and (mac := eth.get("mac")):
+                return str(mac)
+        wifi_info = data.get("wifi")
+        if isinstance(wifi_info, dict) and (mac := wifi_info.get("wlan0_mac")):
+            return str(mac)
+        return None
 
     async def get_bluetooth_status(self, speaker: SpeakerNode) -> dict[str, Any]:
         """Retrieve bluetooth status from the speaker."""
