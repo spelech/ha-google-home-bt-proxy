@@ -16,7 +16,6 @@ from custom_components.google_home_bt_proxy.const import (
     CONF_MASTER_TOKEN,
     CONF_OAUTH_TOKEN,
     CONF_PASSWORD,
-    CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
     CONF_USERNAME,
@@ -142,26 +141,35 @@ async def test_options_flow():
     mock_entry.options = {
         CONF_SCAN_TIMEOUT: 5,
         CONF_SCAN_INTERVAL: 10,
-        CONF_RSSI_THRESHOLD: -90,
     }
 
     options_flow = GoogleHomeBtProxyConfigFlow.async_get_options_flow(mock_entry)
     assert isinstance(options_flow, GoogleHomeBtProxyOptionsFlowHandler)
 
-    # Show form
-    form_result = await options_flow.async_step_init(None)
-    assert form_result["type"] == "form"
-    assert form_result["step_id"] == "init"
+    # Show hub menu
+    menu_result = await options_flow.async_step_init(None)
+    assert menu_result["type"] == "menu"
+    assert menu_result["step_id"] == "init"
+    assert "scanning" in menu_result["menu_options"]
+    assert "playback" in menu_result["menu_options"]
+    assert "signal_processing" in menu_result["menu_options"]
+    assert "filtering" in menu_result["menu_options"]
+    assert "speaker_overrides" in menu_result["menu_options"]
 
-    # Submit form
+    # Navigate to scanning step
+    form_result = await options_flow.async_step_scanning(None)
+    assert form_result["type"] == "form"
+    assert form_result["step_id"] == "scanning"
+
+    # Submit scanning form
     user_input = {
         CONF_SCAN_TIMEOUT: 10,
         CONF_SCAN_INTERVAL: 20,
-        CONF_RSSI_THRESHOLD: -75,
     }
-    create_result = await options_flow.async_step_init(user_input)
+    create_result = await options_flow.async_step_scanning(user_input)
     assert create_result["type"] == "create_entry"
-    assert create_result["data"] == user_input
+    assert create_result["data"][CONF_SCAN_TIMEOUT] == 10
+    assert create_result["data"][CONF_SCAN_INTERVAL] == 20
 
 
 @pytest.mark.asyncio
@@ -172,7 +180,6 @@ async def test_options_flow_with_playback_settings():
         CONF_PLAYBACK_MODE,
         CONF_PLAYING_SCAN_INTERVAL,
         CONF_PLAYING_SCAN_TIMEOUT,
-        CONF_RSSI_OFFSET,
         MODE_SKIP_CEILING,
     )
 
@@ -180,31 +187,34 @@ async def test_options_flow_with_playback_settings():
     mock_entry.options = {}
     handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
 
-    # Show form and verify schema includes new fields
-    form_result = await handler.async_step_init(None)
+    # Show menu and verify playback option exists
+    menu_result = await handler.async_step_init(None)
+    assert menu_result["type"] == "menu"
+    assert "playback" in menu_result["menu_options"]
+
+    # Show playback form and verify schema includes playback fields
+    form_result = await handler.async_step_playback(None)
     assert form_result["type"] == "form"
+    assert form_result["step_id"] == "playback"
     schema_keys = [k.schema for k in form_result["data_schema"].schema.keys()]
     assert CONF_PLAYBACK_MODE in schema_keys
     assert CONF_PLAYING_SCAN_TIMEOUT in schema_keys
     assert CONF_PLAYING_SCAN_INTERVAL in schema_keys
     assert CONF_MAX_PLAYING_SKIP_DURATION in schema_keys
-    assert CONF_RSSI_OFFSET in schema_keys
 
-    # Submit form
+    # Submit playback form
     user_input = {
         CONF_PLAYBACK_MODE: MODE_SKIP_CEILING,
         CONF_PLAYING_SCAN_TIMEOUT: 3,
         CONF_PLAYING_SCAN_INTERVAL: 45,
         CONF_MAX_PLAYING_SKIP_DURATION: 180,
-        CONF_RSSI_OFFSET: 4,
     }
-    create_result = await handler.async_step_init(user_input)
+    create_result = await handler.async_step_playback(user_input)
     assert create_result["type"] == "create_entry"
     assert create_result["data"][CONF_PLAYBACK_MODE] == MODE_SKIP_CEILING
     assert create_result["data"][CONF_PLAYING_SCAN_TIMEOUT] == 3
     assert create_result["data"][CONF_PLAYING_SCAN_INTERVAL] == 45
     assert create_result["data"][CONF_MAX_PLAYING_SKIP_DURATION] == 180
-    assert create_result["data"][CONF_RSSI_OFFSET] == 4
 
 
 @pytest.mark.asyncio
@@ -621,17 +631,25 @@ async def test_options_flow_speaker_overrides():
     handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
     handler.hass = mock_hass
 
-    # 1. Initial step lists global + discovered speakers
-    init_form = await handler.async_step_init(None)
-    assert init_form["type"] == "form"
-    assert CONF_SELECTED_SPEAKER in [k.schema for k in init_form["data_schema"].schema.keys()]
+    # 1. Hub menu lists speaker_overrides
+    menu_result = await handler.async_step_init(None)
+    assert menu_result["type"] == "menu"
+    assert "speaker_overrides" in menu_result["menu_options"]
 
-    # 2. Select spk-office -> transitions to speaker_settings step
-    select_result = await handler.async_step_init({CONF_SELECTED_SPEAKER: "spk-office"})
+    # 2. Speaker overrides step lists discovered speakers
+    overrides_form = await handler.async_step_speaker_overrides(None)
+    assert overrides_form["type"] == "form"
+    assert overrides_form["step_id"] == "speaker_overrides"
+    assert CONF_SELECTED_SPEAKER in [k.schema for k in overrides_form["data_schema"].schema.keys()]
+
+    # 3. Select spk-office -> transitions to speaker_settings step
+    select_result = await handler.async_step_speaker_overrides(
+        {CONF_SELECTED_SPEAKER: "spk-office"}
+    )
     assert select_result["type"] == "form"
     assert select_result["step_id"] == "speaker_settings"
 
-    # 3. Submit custom overrides for spk-office
+    # 4. Submit custom overrides for spk-office
     speaker_input = {
         CONF_CUSTOM_SETTINGS: True,
         CONF_SCAN_INTERVAL: 45,
@@ -644,7 +662,7 @@ async def test_options_flow_speaker_overrides():
     assert save_result["data"][CONF_SPEAKER_OVERRIDES]["spk-office"][CONF_SCAN_INTERVAL] == 45
     assert save_result["data"][CONF_SPEAKER_OVERRIDES]["spk-office"][CONF_SCAN_TIMEOUT] == 8
 
-    # 4. Now test removing overrides (unchecking custom_settings)
+    # 5. Now test removing overrides (unchecking custom_settings)
     mock_entry.options = save_result["data"]
     handler2 = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
     handler2.hass = mock_hass
@@ -657,11 +675,32 @@ async def test_options_flow_speaker_overrides():
     assert remove_result["type"] == "create_entry"
     assert "spk-office" not in remove_result["data"][CONF_SPEAKER_OVERRIDES]
 
+    # 6. Test speaker_overrides when no speakers are discovered
+    empty_entry = MagicMock()
+    empty_entry.options = {}
+    empty_entry.entry_id = "test-empty"
+    handler_empty = GoogleHomeBtProxyOptionsFlowHandler(empty_entry)
+    empty_hass = MagicMock()
+    empty_hass.data = {DOMAIN: {"test-empty": {}}}
+    handler_empty.hass = empty_hass
+
+    empty_form = await handler_empty.async_step_speaker_overrides(None)
+    assert empty_form["type"] == "form"
+    assert empty_form["step_id"] == "speaker_overrides"
+    assert len(empty_form["data_schema"].schema) == 0
+
+    # 7. Submitting empty speaker_overrides returns to init
+    empty_sub = await handler_empty.async_step_speaker_overrides({})
+    assert empty_sub["type"] == "menu"
+    assert empty_sub["step_id"] == "init"
+
 
 @pytest.mark.asyncio
 async def test_options_flow_signal_processing_and_orchestration():
-    """Verify options flow allows configuring signal processing and orchestration settings."""
+    """Verify options flow allows configuring signal processing, filtering, and orchestration."""
     from custom_components.google_home_bt_proxy.const import (
+        BERMUDA_NOTICE,
+        CONF_BERMUDA_MODE,
         CONF_ENABLE_DISTANCE_ESTIMATION,
         CONF_ENABLE_RSSI_SMOOTHING,
         CONF_FILTER_MODE,
@@ -671,16 +710,17 @@ async def test_options_flow_signal_processing_and_orchestration():
         CONF_REF_POWER,
         CONF_RSSI_FILTER_MODE,
         CONF_RSSI_FILTER_WINDOW,
-        CONF_SELECTED_SPEAKER,
+        CONF_RSSI_OFFSET,
+        CONF_SPEAKER_OVERRIDES,
         CONF_TRACKED_DEVICES,
         FILTER_MODE_WHITELIST,
-        GLOBAL_SETTINGS,
         ORCHESTRATION_INDEPENDENT,
         RSSI_FILTER_EMA,
     )
 
+    # 1. When Bermuda mode is disabled (False): returns form with editable RF settings, saves
     mock_entry = MagicMock()
-    mock_entry.options = {}
+    mock_entry.options = {CONF_BERMUDA_MODE: False}
     mock_entry.entry_id = "entry-opt-signal"
 
     handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
@@ -688,12 +728,11 @@ async def test_options_flow_signal_processing_and_orchestration():
     mock_hass.data = {DOMAIN: {"entry-opt-signal": {}}}
     handler.hass = mock_hass
 
-    # 1. Check form schema includes signal processing keys
-    form = await handler.async_step_init(None)
+    form = await handler.async_step_signal_processing(None)
+    assert form["type"] == "form"
+    assert form["step_id"] == "signal_processing"
     schema_keys = [k.schema for k in form["data_schema"].schema.keys()]
-    assert CONF_ORCHESTRATION_MODE in schema_keys
-    assert CONF_FILTER_MODE in schema_keys
-    assert CONF_TRACKED_DEVICES in schema_keys
+    assert CONF_RSSI_OFFSET in schema_keys
     assert CONF_ENABLE_RSSI_SMOOTHING in schema_keys
     assert CONF_RSSI_FILTER_MODE in schema_keys
     assert CONF_RSSI_FILTER_WINDOW in schema_keys
@@ -702,12 +741,8 @@ async def test_options_flow_signal_processing_and_orchestration():
     assert CONF_REF_POWER in schema_keys
     assert CONF_PATH_LOSS_EXPONENT in schema_keys
 
-    # 2. Save global signal options
-    global_payload = {
-        CONF_SELECTED_SPEAKER: GLOBAL_SETTINGS,
-        CONF_ORCHESTRATION_MODE: ORCHESTRATION_INDEPENDENT,
-        CONF_FILTER_MODE: FILTER_MODE_WHITELIST,
-        CONF_TRACKED_DEVICES: "AA:BB:CC,Beacon",
+    rf_payload = {
+        CONF_RSSI_OFFSET: -2,
         CONF_ENABLE_RSSI_SMOOTHING: False,
         CONF_RSSI_FILTER_MODE: RSSI_FILTER_EMA,
         CONF_RSSI_FILTER_WINDOW: 5,
@@ -716,11 +751,9 @@ async def test_options_flow_signal_processing_and_orchestration():
         CONF_REF_POWER: -62,
         CONF_PATH_LOSS_EXPONENT: 2.8,
     }
-    result = await handler.async_step_init(global_payload)
+    result = await handler.async_step_signal_processing(rf_payload)
     assert result["type"] == "create_entry"
-    assert result["data"][CONF_ORCHESTRATION_MODE] == ORCHESTRATION_INDEPENDENT
-    assert result["data"][CONF_FILTER_MODE] == FILTER_MODE_WHITELIST
-    assert result["data"][CONF_TRACKED_DEVICES] == "AA:BB:CC,Beacon"
+    assert result["data"][CONF_RSSI_OFFSET] == -2
     assert result["data"][CONF_ENABLE_RSSI_SMOOTHING] is False
     assert result["data"][CONF_RSSI_FILTER_MODE] == RSSI_FILTER_EMA
     assert result["data"][CONF_RSSI_FILTER_WINDOW] == 5
@@ -728,3 +761,61 @@ async def test_options_flow_signal_processing_and_orchestration():
     assert result["data"][CONF_MAX_DISTANCE] == 7.5
     assert result["data"][CONF_REF_POWER] == -62
     assert result["data"][CONF_PATH_LOSS_EXPONENT] == 2.8
+
+    # Test filtering step
+    filter_form = await handler.async_step_filtering(None)
+    assert filter_form["type"] == "form"
+    filter_keys = [k.schema for k in filter_form["data_schema"].schema.keys()]
+    assert CONF_FILTER_MODE in filter_keys
+    assert CONF_TRACKED_DEVICES in filter_keys
+
+    filter_res = await handler.async_step_filtering(
+        {
+            CONF_FILTER_MODE: FILTER_MODE_WHITELIST,
+            CONF_TRACKED_DEVICES: "AA:BB:CC,Beacon",
+        }
+    )
+    assert filter_res["type"] == "create_entry"
+    assert filter_res["data"][CONF_FILTER_MODE] == FILTER_MODE_WHITELIST
+    assert filter_res["data"][CONF_TRACKED_DEVICES] == "AA:BB:CC,Beacon"
+
+    # Test orchestration in scanning step
+    scan_res = await handler.async_step_scanning(
+        {CONF_ORCHESTRATION_MODE: ORCHESTRATION_INDEPENDENT}
+    )
+    assert scan_res["type"] == "create_entry"
+    assert scan_res["data"][CONF_ORCHESTRATION_MODE] == ORCHESTRATION_INDEPENDENT
+
+    # 2. When Bermuda mode is True: returns form with informational notice and no editable RF keys
+    mock_entry_bermuda = MagicMock()
+    mock_entry_bermuda.options = {CONF_BERMUDA_MODE: True}
+    mock_entry_bermuda.entry_id = "entry-opt-bermuda"
+
+    handler_bermuda = GoogleHomeBtProxyOptionsFlowHandler(mock_entry_bermuda)
+    handler_bermuda.hass = mock_hass
+
+    notice_form = await handler_bermuda.async_step_signal_processing(None)
+    assert notice_form["type"] == "form"
+    assert notice_form["step_id"] == "signal_processing"
+    assert len(notice_form["data_schema"].schema) == 0
+    assert notice_form["description_placeholders"]["bermuda_notice"] == BERMUDA_NOTICE
+
+    # Submitting notice returns to hub menu
+    ack_res = await handler_bermuda.async_step_signal_processing({})
+    assert ack_res["type"] == "menu"
+    assert ack_res["step_id"] == "init"
+
+    # 3. Test speaker-specific override triggering Bermuda mode in signal_processing
+    mock_entry_spk = MagicMock()
+    mock_entry_spk.options = {
+        CONF_BERMUDA_MODE: False,
+        CONF_SPEAKER_OVERRIDES: {"spk-test": {CONF_BERMUDA_MODE: True}},
+    }
+    handler_spk = GoogleHomeBtProxyOptionsFlowHandler(mock_entry_spk)
+    handler_spk.hass = mock_hass
+    handler_spk._selected_speaker = "spk-test"
+
+    spk_notice = await handler_spk.async_step_signal_processing(None)
+    assert spk_notice["type"] == "form"
+    assert len(spk_notice["data_schema"].schema) == 0
+    assert spk_notice["description_placeholders"]["bermuda_notice"] == BERMUDA_NOTICE
