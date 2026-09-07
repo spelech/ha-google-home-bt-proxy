@@ -85,6 +85,16 @@ DEFAULT_ORCHESTRATION_MODE: Final = ORCHESTRATION_ROUND_ROBIN
 DEFAULT_BERMUDA_MODE: Final = False
 DEFAULT_FILTER_PEER_PROXIES: Final = True
 
+BERMUDA_NOTICE: Final = (
+    "Bermuda Optimization Mode is active. Signal smoothing, hardware RSSI offsets, "
+    "and distance modeling are managed natively by Bermuda to preserve peak velocity "
+    "tracking. To configure antenna offsets, use Bermuda's Configure Scanner Offsets menu."
+)
+STANDALONE_NOTICE: Final = (
+    "Configure signal filtering, smoothing, and distance estimation parameters "
+    "for standalone deployments."
+)
+
 
 # API Constants
 PORT_HTTPS: Final = 8443

@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
 
 from .const import (
+    BERMUDA_NOTICE,
     CONF_ANDROID_ID,
     CONF_BERMUDA_MODE,
     CONF_CUSTOM_SETTINGS,
@@ -79,6 +80,7 @@ from .const import (
     RSSI_FILTER_EMA,
     RSSI_FILTER_MEDIAN,
     RSSI_FILTER_NONE,
+    STANDALONE_NOTICE,
 )
 
 if not hasattr(glocaltokens.client, "get_android_id"):
@@ -334,41 +336,53 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
 
     def _get_speaker_choices(self) -> dict[str, str]:
         """Return mapping of target choice keys to labels."""
-        choices = {GLOBAL_SETTINGS: "Global Settings (Default for All Speakers)"}
+        choices: dict[str, str] = {}
         if hasattr(self, "hass") and self.hass is not None:
             entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
             coord = entry_data.get("coordinator")
             if coord and hasattr(coord, "speakers"):
                 for spk_id, spk in coord.speakers.items():
                     choices[spk_id] = f"{spk.name} ({spk.hardware})"
+        for spk_id in self.config_entry.options.get(CONF_SPEAKER_OVERRIDES, {}):
+            if spk_id not in choices:
+                choices[spk_id] = spk_id
         return choices
 
+    def _is_bermuda_mode_active(self) -> bool:
+        """Check whether Bermuda Mode is active in options or for the selected speaker."""
+        options = self.config_entry.options
+        if hasattr(self, "_selected_speaker") and self._selected_speaker != GLOBAL_SETTINGS:
+            spk_overrides = options.get(CONF_SPEAKER_OVERRIDES, {}).get(self._selected_speaker, {})
+            if CONF_BERMUDA_MODE in spk_overrides:
+                return bool(spk_overrides[CONF_BERMUDA_MODE])
+        return bool(options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE))
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Manage the options."""
-        speaker_choices = self._get_speaker_choices()
+        """Manage the options hub menu."""
+        self._selected_speaker = GLOBAL_SETTINGS
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=[
+                "scanning",
+                "playback",
+                "signal_processing",
+                "filtering",
+                "speaker_overrides",
+            ],
+        )
 
+    async def async_step_scanning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage scanning & orchestration options."""
         if user_input is not None:
-            selected = user_input.get(CONF_SELECTED_SPEAKER, GLOBAL_SETTINGS)
-            if selected != GLOBAL_SETTINGS:
-                self._selected_speaker = selected
-                return await self.async_step_speaker_settings()
-
-            cleaned_input = {
-                k: v
-                for k, v in user_input.items()
-                if k not in (CONF_SELECTED_SPEAKER, CONF_CUSTOM_SETTINGS)
-            }
             new_options = dict(self.config_entry.options)
-            new_options.update(cleaned_input)
+            new_options.update(user_input)
             return self.async_create_entry(title="", data=new_options)
 
         options = self.config_entry.options
         schema = vol.Schema(
             {
-                vol.Optional(
-                    CONF_SELECTED_SPEAKER,
-                    default=GLOBAL_SETTINGS,
-                ): vol.In(speaker_choices),
                 vol.Optional(
                     CONF_BERMUDA_MODE,
                     default=options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE),
@@ -382,10 +396,6 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     default=options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE),
                 ): vol.In([ORCHESTRATION_ROUND_ROBIN, ORCHESTRATION_INDEPENDENT]),
                 vol.Optional(
-                    CONF_PLAYBACK_MODE,
-                    default=options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
-                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
-                vol.Optional(
                     CONF_SCAN_TIMEOUT,
                     default=options.get(CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT),
                 ): vol.All(vol.Coerce(int), vol.Range(min=2, max=15)),
@@ -393,6 +403,26 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_SCAN_INTERVAL,
                     default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
+            }
+        )
+        return self.async_show_form(step_id="scanning", data_schema=schema)
+
+    async def async_step_playback(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage media playback handling options."""
+        if user_input is not None:
+            new_options = dict(self.config_entry.options)
+            new_options.update(user_input)
+            return self.async_create_entry(title="", data=new_options)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_PLAYBACK_MODE,
+                    default=options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
+                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
                 vol.Optional(
                     CONF_PLAYING_SCAN_TIMEOUT,
                     default=options.get(CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT),
@@ -407,22 +437,35 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_MAX_PLAYING_SKIP_DURATION, DEFAULT_MAX_PLAYING_SKIP_DURATION
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=30, max=900)),
-                vol.Optional(
-                    CONF_RSSI_THRESHOLD,
-                    default=options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),
-                ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-40)),
+            }
+        )
+        return self.async_show_form(step_id="playback", data_schema=schema)
+
+    async def async_step_signal_processing(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage signal processing and RF options, adapting to Bermuda mode."""
+        if self._is_bermuda_mode_active():
+            if user_input is not None:
+                return await self.async_step_init()
+            return self.async_show_form(
+                step_id="signal_processing",
+                data_schema=vol.Schema({}),
+                description_placeholders={"bermuda_notice": BERMUDA_NOTICE},
+            )
+
+        if user_input is not None:
+            new_options = dict(self.config_entry.options)
+            new_options.update(user_input)
+            return self.async_create_entry(title="", data=new_options)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
                 vol.Optional(
                     CONF_RSSI_OFFSET,
                     default=options.get(CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET),
                 ): vol.All(vol.Coerce(int), vol.Range(min=-30, max=30)),
-                vol.Optional(
-                    CONF_FILTER_MODE,
-                    default=options.get(CONF_FILTER_MODE, DEFAULT_FILTER_MODE),
-                ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
-                vol.Optional(
-                    CONF_TRACKED_DEVICES,
-                    default=options.get(CONF_TRACKED_DEVICES, ""),
-                ): str,
                 vol.Optional(
                     CONF_ENABLE_RSSI_SMOOTHING,
                     default=options.get(CONF_ENABLE_RSSI_SMOOTHING, DEFAULT_ENABLE_RSSI_SMOOTHING),
@@ -453,14 +496,78 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_PATH_LOSS_EXPONENT,
                     default=float(options.get(CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT)),
                 ): vol.All(vol.Coerce(float), vol.Range(min=1.0, max=5.0)),
+            }
+        )
+        return self.async_show_form(
+            step_id="signal_processing",
+            data_schema=schema,
+            description_placeholders={"bermuda_notice": STANDALONE_NOTICE},
+        )
+
+    async def async_step_filtering(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage device filtering and IRK resolver options."""
+        if user_input is not None:
+            new_options = dict(self.config_entry.options)
+            new_options.update(user_input)
+            return self.async_create_entry(title="", data=new_options)
+
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_FILTER_MODE,
+                    default=options.get(CONF_FILTER_MODE, DEFAULT_FILTER_MODE),
+                ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
+                vol.Optional(
+                    CONF_TRACKED_DEVICES,
+                    default=options.get(CONF_TRACKED_DEVICES, ""),
+                ): str,
+                vol.Optional(
+                    CONF_RSSI_THRESHOLD,
+                    default=options.get(CONF_RSSI_THRESHOLD, DEFAULT_RSSI_THRESHOLD),
+                ): vol.All(vol.Coerce(int), vol.Range(min=-100, max=-40)),
                 vol.Optional(
                     CONF_KNOWN_IRKS,
                     default=options.get(CONF_KNOWN_IRKS, ""),
                 ): str,
             }
         )
+        return self.async_show_form(step_id="filtering", data_schema=schema)
 
-        return self.async_show_form(step_id="init", data_schema=schema)
+    async def async_step_speaker_overrides(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select a speaker to configure overrides."""
+        speaker_choices = self._get_speaker_choices()
+
+        if user_input is not None:
+            selected = user_input.get(CONF_SELECTED_SPEAKER)
+            if selected and (selected in speaker_choices or selected != GLOBAL_SETTINGS):
+                self._selected_speaker = selected
+                return await self.async_step_speaker_settings()
+            return await self.async_step_init()
+
+        if not speaker_choices:
+            return self.async_show_form(
+                step_id="speaker_overrides",
+                data_schema=vol.Schema({}),
+                description_placeholders={
+                    "description": "No Google Home speakers have been discovered yet."
+                },
+            )
+
+        default_speaker = next(iter(speaker_choices.keys()))
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_SELECTED_SPEAKER,
+                    default=default_speaker,
+                ): vol.In(speaker_choices),
+            }
+        )
+        return self.async_show_form(step_id="speaker_overrides", data_schema=schema)
 
     async def async_step_speaker_settings(
         self, user_input: dict[str, Any] | None = None

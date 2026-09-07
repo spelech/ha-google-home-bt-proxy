@@ -406,13 +406,22 @@ async def test_options_flow_bermuda_mode_configuration():
 
     handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
     res_init = await handler.async_step_init(None)
-    assert res_init["type"] == "form"
-    schema_keys = [k.schema for k in res_init["data_schema"].schema.keys()]
+    assert res_init["type"] == "menu"
+    assert res_init["step_id"] == "init"
+    assert "scanning" in res_init["menu_options"]
+    assert "playback" in res_init["menu_options"]
+    assert "signal_processing" in res_init["menu_options"]
+
+    # Navigate to scanning step and check schema
+    res_scanning = await handler.async_step_scanning(None)
+    assert res_scanning["type"] == "form"
+    assert res_scanning["step_id"] == "scanning"
+    schema_keys = [k.schema for k in res_scanning["data_schema"].schema.keys()]
     assert CONF_BERMUDA_MODE in schema_keys
     assert CONF_FILTER_PEER_PROXIES in schema_keys
 
     # Save options with Bermuda mode enabled
-    res_save = await handler.async_step_init(
+    res_save = await handler.async_step_scanning(
         {
             CONF_BERMUDA_MODE: True,
             CONF_FILTER_PEER_PROXIES: True,
