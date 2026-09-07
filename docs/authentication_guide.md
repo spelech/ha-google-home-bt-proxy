@@ -47,14 +47,14 @@ If Google rejects password login (returning `BadAuthentication` or requiring bro
 Open a desktop browser (Chrome, Edge, Brave, or Firefox) and navigate to:
 [https://accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup)
 
-Log into your Google account normally. Complete any 2FA prompts, SMS codes, or passkey prompts that Google displays.
+Log into your Google account normally. Complete any 2FA prompts, SMS codes, or passkey prompts that Google displays, and click **"I agree"** on the setup screen.
 
 ### Step 2: Open Developer Tools to Find the Cookie
-1. Once logged in, press **`F12`** (or **`Ctrl+Shift+I`** on Windows/Linux, **`Cmd+Option+I`** on macOS).
+1. Once you click "I agree", press **`F12`** (or **`Ctrl+Shift+I`** on Windows/Linux, **`Cmd+Option+I`** on macOS).
 2. Go to the **Application** tab in Chrome/Edge/Brave (or **Storage** tab in Firefox).
 3. In the left sidebar, expand **Cookies** and click **`https://accounts.google.com`**.
 4. In the table of cookies, locate the row named **`oauth_token`**.
-5. Double-click the **Value** column for `oauth_token` and copy it. It starts with `oauth2_4/`.
+5. Double-click the **Value** column for `oauth_token` and copy it. It starts with `oauth2_4/` (you can now close the browser tab).
 
 ![DevTools Cookie Extraction Guide](images/devtools_cookie_guide.jpg)
 

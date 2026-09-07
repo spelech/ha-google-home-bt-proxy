@@ -104,10 +104,10 @@ If Google rejects your login (`invalid_auth` or `BadAuthentication`):
 2. **If Google Blocks App Passwords (Browser Verification Required)**:
    Some Google accounts or network environments trigger Google's automated security verification. You can easily obtain a token via your browser without installing any tools:
    - In your desktop browser, open: `https://accounts.google.com/EmbeddedSetup`
-   - Sign in to your Google account.
+   - Sign in to your Google account and click **"I agree"** on the setup screen.
    - Open Developer Tools (`F12` or `Ctrl+Shift+I` / `Cmd+Opt+I`).
    - Go to **Application** (Chrome/Edge) or **Storage** (Firefox) > **Cookies** > `https://accounts.google.com`.
-   - Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`).
+   - Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`), then you can close the browser tab.
    - In Home Assistant, enter your Google email and paste that token directly into the **Master Token** field. The integration will automatically exchange it for a permanent master token.
 
 For a detailed step-by-step walkthrough with visual diagrams and screenshots, see the [Authentication Guide](docs/authentication_guide.md).
