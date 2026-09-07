@@ -90,9 +90,10 @@ Restart Home Assistant.
 
 1. In Home Assistant, navigate to **Settings** > **Devices & Services** > **Add Integration**.
 2. Search for **Google Home Bluetooth Proxy**.
-3. Enter your Google account credentials:
-   - **Recommended**: Enter your Google **Master Token** (`oauth2_rt_...`) and **Android ID** (or use the companion browser extension in `extensions/google_home_auth_extension`).
-   - **Alternative**: Enter your Google account email and an App Password.
+3. Authenticate using your preferred method:
+   - **App Password (Easiest)**: Enter your Google account email and a 16-character App Password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Leave Master Token, OAuth Token, and Android ID blank.
+   - **Browser Extension (Automated)**: Use the extension in `extensions/google_home_auth_extension`. Enter the Flow ID shown in the dialog, click 'Start Google Login', and it authenticates automatically.
+   - **Master Token**: Enter your Google account email and Master Token (`oauth2_rt_...` or `aas_et/...`).
 4. The integration discovers supported speakers on your local network and sets up Bluetooth scanner proxies for them.
 
 ### Configuration Options
