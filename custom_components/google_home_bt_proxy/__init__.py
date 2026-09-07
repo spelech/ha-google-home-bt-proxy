@@ -16,7 +16,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import GoogleHomeApiClient, SpeakerConnectionError, TokenExpiredError
-from .auth_view import GoogleHomeBtProxyAuthCallbackView
 from .const import (
     CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
@@ -85,7 +84,6 @@ PLATFORMS: list[Platform] = [
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up Google Home Bluetooth Proxy component."""
-    hass.http.register_view(GoogleHomeBtProxyAuthCallbackView)
     return True
 
 

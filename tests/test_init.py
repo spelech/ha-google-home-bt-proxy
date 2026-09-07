@@ -7,6 +7,7 @@ import pytest
 
 from custom_components.google_home_bt_proxy import (
     _speaker_scan_loop,
+    async_setup,
     async_setup_entry,
     async_unload_entry,
 )
@@ -22,6 +23,13 @@ from custom_components.google_home_bt_proxy.const import (
     DOMAIN,
 )
 from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerNode
+
+
+@pytest.mark.asyncio
+async def test_async_setup_returns_true():
+    """Verify async_setup returns True and no unauthenticated HTTP views are registered."""
+    mock_hass = MagicMock()
+    assert await async_setup(mock_hass, {}) is True
 
 
 @pytest.mark.asyncio

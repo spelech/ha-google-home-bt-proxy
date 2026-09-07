@@ -179,7 +179,12 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input[CONF_MASTER_TOKEN] = res["Token"]
                 user_input.pop(CONF_OAUTH_TOKEN, None)
                 return True
-            _LOGGER.warning("OAuth token exchange failed: %s", res)
+            err_msg = (
+                res.get("Error", "Authentication error")
+                if isinstance(res, dict)
+                else "Authentication error"
+            )
+            _LOGGER.warning("OAuth token exchange failed: %s", err_msg)
             return False
 
         if master_token:
@@ -196,6 +201,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             token = await self.hass.async_add_executor_job(client.get_master_token)
             if token:
                 user_input[CONF_MASTER_TOKEN] = token
+                user_input.pop(CONF_PASSWORD, None)
                 return True
             return False
 
@@ -214,7 +220,6 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=schema,
             errors=errors or {},
-            description_placeholders={"flow_id": getattr(self, "flow_id", "") or ""},
         )
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

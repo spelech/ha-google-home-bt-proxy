@@ -114,6 +114,8 @@ async def test_validate_credentials_with_credentials_success():
         tokens_inst = mock_tokens_cls.return_value
         tokens_inst.get_master_token = MagicMock()
         assert await flow._validate_credentials(user_input) is True
+        assert user_input[CONF_MASTER_TOKEN] == "obtained-master-token"
+        assert CONF_PASSWORD not in user_input
 
 
 @pytest.mark.asyncio

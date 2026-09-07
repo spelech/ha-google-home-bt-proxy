@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-09-07
+
+### Security & Hardening
+- **Removed Browser Extension & High-Privilege Permissions**:
+  - Removed the browser extension completely, eliminating high-privilege browser permissions (`cookies`, `*://accounts.google.com/*`, `storage`).
+- **Removed Unauthenticated HTTP Callback Endpoint**:
+  - Removed `GoogleHomeBtProxyAuthCallbackView` and `/api/google_home_bt_proxy/auth_callback`, eliminating an open unauthenticated HTTP endpoint on Home Assistant.
+- **Eliminated Plaintext Password Retention**:
+  - Passwords and App Passwords are now immediately stripped from `entry.data` once master tokens are obtained, preventing plaintext credentials from being saved to `.storage/core.config_entries`.
+- **Sanitized OAuth Error Logging**:
+  - Sanitized error logs to prevent dumping upstream response payloads into Home Assistant logs.
+
 ## [1.0.4] - 2026-09-07
 
 ### Improved
