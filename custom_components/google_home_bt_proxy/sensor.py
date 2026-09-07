@@ -93,6 +93,8 @@ class GoogleHomeBtProxyStatusSensor(GoogleHomeBtProxyBaseSensor):
             "bermuda_compatible": True,
             "bermuda_mode": self._state.bermuda_mode,
             "rssi_mode": self._state.rssi_mode,
+            "assigned_area": self._state.assigned_area,
+            "bermuda_area_ready": self._state.bermuda_area_ready,
         }
 
 

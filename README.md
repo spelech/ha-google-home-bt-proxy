@@ -153,11 +153,27 @@ When **Bermuda Mode** is active (`bermuda_mode: true`), the integration automati
 | **Peer Proxy Suppression** | **Enabled** (`filter_peer_proxies`) | Google Home and Nest speakers broadcast their own Bluetooth inquiry responses. Without suppression, neighboring speakers register as ghost beacons, spam HA device registries, and create cross-proxy interference. The proxy filters out base MACs and Bermuda-style $\pm 3$ MAC math offsets (`mac_math_offset`). |
 | **Device Registry Connection** | `dr.CONNECTION_NETWORK_MAC` | Bermuda's scanner discovery (`bermuda_device.py:328-336`) cross-references active scanners against the Device Registry using `("mac", altmac)`. If this network connection is missing, Bermuda cannot discover the speaker's `address_wifi_mac` or Area assignment and refuses to instantiate `distance_to_<scanner>` sensors. |
 
-### Bermuda Calibration Guide
+### Bermuda Calibration & Distance Recognition Guide
 
 1. **Keep Bermuda Mode Enabled**: Ensure **Bermuda BLE Optimization Mode** is checked in the proxy configuration.
-2. **Assign Areas in HA**: Assign each Google Home speaker to its physical room in Home Assistant (**Settings** > **Devices & Services** > **Google Home Bluetooth Proxy** > click device > assign Area). Bermuda will automatically inherit this area.
-3. **Calibrate Offsets Inside Bermuda**: If mixing Google Home Mini (Gen 1) and Nest Mini (Gen 2) units with ESPHome proxies, configure antenna offsets inside Bermuda (**Settings** > **Devices & Services** > **Bermuda** > **Configure** > **Configure Scanner Offsets**). See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for full calibration steps.
+2. **Assign Areas in HA (Crucial for Distance & Room Presence)**:
+   - Bermuda's room presence engine **strictly disqualifies any scanner without an assigned Area** (`area_id is None`). If a speaker has no Area, Bermuda raises a `REPAIR_SCANNER_WITHOUT_AREA` repair issue and will not attribute room presence or closest distance to that speaker.
+   - `ha-google-home-bt-proxy` automatically attempts to inherit existing Area assignments from official Google Cast or Google Home device entries, and continuously synchronizes Area assignments between the Google Home speaker device and the underlying Home Assistant Bluetooth scanner device.
+   - Ensure each speaker is assigned to an Area in Home Assistant (**Settings** > **Devices & Services** > **Google Home Bluetooth Proxy** > click speaker device > assign **Area**).
+3. **Enabling Per-Scanner Distance Entities (`Distance to <Speaker>`)**:
+   - In Bermuda's core architecture, individual scanner range entities (`sensor.<device>_distance_to_<speaker>`) are **disabled by default** (`entity_registry_enabled_default = False`) to prevent dashboard clutter.
+   - Only aggregate `Area`, `Distance` (closest overall), and `Floor` entities are enabled out of the box.
+   - If your phone or watch is tracked by Bermuda and you want to see the specific distance measured by a Google Home speaker:
+     1. In Home Assistant, navigate to **Settings** > **Devices & Services** > **Bermuda BLE Trilateration**.
+     2. Open your tracked device (e.g., your phone or watch).
+     3. Click **Entities** (or look under **Diagnostic** / disabled entities).
+     4. Find **Distance to <Speaker Name>** and click **Enable entity**.
+4. **Phone & Smart Watch Tracking: Private BLE Device (IRK) vs iBeacon**:
+   - Google Home speakers utilize local Bluetooth Inquiry scanning (`/setup/bluetooth/scan_results`), which exposes the device MAC address, RSSI, and device class. Google Home local APIs **do not return raw manufacturer data payloads**, meaning Bermuda cannot decode proprietary iBeacon UUID frames (`0x004C0215`) from Google Home scans.
+   - To track iOS devices, Apple Watches, or Android devices that use rotating Resolvable Private Addresses (RPA), configure Home Assistant's native **[Private BLE Device](https://www.home-assistant.io/integrations/private_ble_device/)** integration with your device's Identity Resolving Key (IRK).
+   - Once the IRK is registered in Home Assistant, Bermuda automatically resolves rotating MACs across all proxies, including Google Home speakers.
+   - **Note on Phone Sleep/Lock Behavior**: iOS and modern Android versions reduce or completely stop background BLE transmissions when the device is locked and screen is off to conserve battery. When you unlock your phone or use an active BLE transmitter (such as the Home Assistant Companion App with BLE Transmitter sensor active), transmissions resume and distance updates immediately.
+5. **Calibrate Offsets Inside Bermuda**: If mixing Google Home Mini (Gen 1) and Nest Mini (Gen 2) units with ESPHome proxies, configure antenna offsets inside Bermuda (**Settings** > **Devices & Services** > **Bermuda** > **Configure** > **Configure Scanner Offsets**). See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for full calibration steps.
 
 ---
 

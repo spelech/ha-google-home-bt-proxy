@@ -73,8 +73,12 @@ If you are running the proxy without Bermuda:
 
 ---
 
-## Tips
+## Tips & Bermuda Troubleshooting
 
-1. **Placement**: Keep speakers a few inches away from walls or metal surfaces when possible to reduce signal bounce.
-2. **Scan Interval**: Set the idle scan interval to 5–10 seconds for tracking walking movement, or 20–30 seconds for stationary items (keys, badges).
-3. **Mixed Deployments**: Google Home proxies can run alongside ESPHome Bluetooth proxies; setting offsets aligns their readings in Bermuda.
+1. **Assign Speaker to an Area**: Bermuda strictly ignores any scanner that does not have an Area assigned (`area_id is None`). If your speaker is not assigned to a room in Home Assistant, Bermuda will raise `REPAIR_SCANNER_WITHOUT_AREA` and refuse to place devices in that room or use the speaker for distance estimation.
+2. **Enable Per-Scanner Distance Entities in HA**: Bermuda disables individual distance sensors (`sensor.<device>_distance_to_<speaker>`) by default. Go to your tracked device in Home Assistant > **Entities** > enable the disabled **Distance to <Speaker>** entity.
+3. **Tracking Phones and Smart Watches**: Google Home speakers perform Bluetooth Inquiry scans without decoding raw manufacturer advertisements. Use Home Assistant's native **Private BLE Device** integration with the device's Identity Resolving Key (IRK) instead of iBeacon UUIDs. Unlocking the phone or running the HA Companion App with the BLE Transmitter sensor active will ensure continuous BLE advertising.
+4. **Placement**: Keep speakers a few inches away from walls or metal surfaces when possible to reduce signal bounce.
+5. **Scan Interval**: Set the idle scan interval to 4–8 seconds for tracking walking movement, or 20–30 seconds for stationary items (keys, badges).
+6. **Mixed Deployments**: Google Home proxies can run alongside ESPHome Bluetooth proxies; setting offsets aligns their readings in Bermuda.
+

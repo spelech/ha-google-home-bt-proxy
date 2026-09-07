@@ -115,6 +115,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     disabled_speakers: list[str] = entry.options.get(CONF_DISABLED_SPEAKERS, [])
     active_speakers = [s for s in speakers if s.device_id not in disabled_speakers]
 
+    # Fetch eureka_info for all active speakers to resolve true hardware MAC and model
+    for speaker in active_speakers:
+        try:
+            await api_client.get_device_info(speaker)
+        except Exception as err:
+            _LOGGER.debug("Could not fetch eureka_info for %s during setup: %s", speaker.name, err)
+
     irk_config_text = entry.options.get(CONF_KNOWN_IRKS, "")
     irk_map = parse_irk_config(irk_config_text)
     irk_resolver = IrkResolver(irk_map) if irk_map else None
@@ -214,8 +221,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         device_registry = dr.async_get(hass)
         speaker_device_id = speaker.device_id
+        assigned_area: str | None = None
         if hasattr(device_registry, "async_get_or_create"):
             try:
+                suggested_area = _resolve_speaker_area(device_registry, speaker)
                 speaker_device = device_registry.async_get_or_create(
                     config_entry_id=entry.entry_id,
                     identifiers={(DOMAIN, speaker.device_id)},
@@ -223,8 +232,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     name=speaker.name,
                     manufacturer="Google",
                     model=speaker.hardware,
+                    suggested_area=suggested_area,
                 )
                 speaker_device_id = speaker_device.id
+                assigned_area = getattr(speaker_device, "area_id", None)
+                if (
+                    not assigned_area
+                    and suggested_area
+                    and hasattr(device_registry, "async_update_device")
+                ):
+                    updated = device_registry.async_update_device(
+                        speaker_device.id, area_id=suggested_area
+                    )
+                    if updated and getattr(updated, "area_id", None):
+                        assigned_area = updated.area_id
+                    else:
+                        assigned_area = suggested_area
             except Exception:
                 speaker_device_id = speaker.device_id
 
@@ -248,6 +271,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             enabled=speaker.enabled,
             bermuda_mode=speaker_bermuda_mode,
             rssi_mode=rssi_mode,
+            assigned_area=assigned_area,
+            bermuda_area_ready=assigned_area is not None,
         )
         speakers_data[speaker.device_id] = {
             "speaker": speaker,
@@ -264,6 +289,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             source_device_id=speaker_device_id,
         )
         unregister_callbacks.append(unreg)
+
+        if assigned_area:
+            _sync_bluetooth_scanner_area(device_registry, speaker.mac_address, assigned_area)
 
         # Stagger worker starts by 1.5 seconds per speaker
         stagger_delay = index * 1.5
@@ -306,6 +334,94 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await res
 
     return True
+
+
+def _resolve_speaker_area(
+    device_registry: Any,
+    speaker: SpeakerNode,
+) -> str | None:
+    """Find existing area assignment for the speaker from other integrations or name match."""
+    if not device_registry:
+        return None
+
+    # 0. Check if our own speaker device already has an area assigned
+    if hasattr(device_registry, "async_get_device"):
+        try:
+            dev = device_registry.async_get_device(identifiers={(DOMAIN, speaker.device_id)})
+            if dev and getattr(dev, "area_id", None):
+                return dev.area_id
+        except Exception:
+            pass
+
+    # 1. Check identifiers for google_home or cast domains
+    for domain in ("google_home", "cast"):
+        if hasattr(device_registry, "async_get_device"):
+            try:
+                dev = device_registry.async_get_device(identifiers={(domain, speaker.device_id)})
+                if dev and getattr(dev, "area_id", None):
+                    return dev.area_id
+            except Exception:
+                pass
+
+    # 2. Check connection by MAC address
+    if speaker.mac_address and hasattr(device_registry, "async_get_device"):
+        norm_mac = speaker.mac_address.lower()
+        for offset in range(-3, 4):
+            alt_mac = mac_math_offset(norm_mac, offset) or norm_mac
+            for test_mac in (alt_mac.lower(), alt_mac.upper()):
+                try:
+                    dev = device_registry.async_get_device(
+                        connections={(dr.CONNECTION_NETWORK_MAC, test_mac)}
+                    )
+                    if dev and getattr(dev, "area_id", None):
+                        return dev.area_id
+                except Exception:
+                    pass
+
+    # 3. Check by friendly name
+    devices = getattr(device_registry, "devices", None)
+    if devices is not None:
+        try:
+            entries = devices.values() if hasattr(devices, "values") else devices
+            target_name = speaker.name.strip().lower()
+            for dev in entries:
+                name = getattr(dev, "name", None) or getattr(dev, "name_by_user", None)
+                area_id = getattr(dev, "area_id", None)
+                if name and area_id and name.strip().lower() == target_name:
+                    return area_id
+        except Exception:
+            pass
+
+    return None
+
+
+def _sync_bluetooth_scanner_area(
+    device_registry: Any,
+    scanner_source: str,
+    area_id: str | None,
+) -> None:
+    """Ensure the Bluetooth scanner device entry has the same area as the proxy speaker."""
+    if not device_registry or not area_id or not hasattr(device_registry, "async_get_device"):
+        return
+    try:
+        bt_dev = None
+        norm = scanner_source.lower()
+        for offset in range(-3, 4):
+            alt = mac_math_offset(norm, offset) or norm
+            for candidate in (alt.upper(), alt.lower()):
+                bt_dev = device_registry.async_get_device(
+                    connections={(dr.CONNECTION_BLUETOOTH, candidate)}
+                )
+                if bt_dev:
+                    break
+            if bt_dev:
+                break
+
+        if bt_dev and getattr(bt_dev, "area_id", None) != area_id:
+            if hasattr(device_registry, "async_update_device"):
+                device_registry.async_update_device(bt_dev.id, area_id=area_id)
+    except Exception as err:
+        _LOGGER.debug("Could not sync Bluetooth scanner area for %s: %s", scanner_source, err)
 
 
 def _get_speaker_setting(
@@ -475,6 +591,24 @@ async def _speaker_scan_loop(
             )
 
         orchestrator.mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
+
+        # Check and synchronize area assignments dynamically
+        device_reg = dr.async_get(hass)
+        if device_reg and hasattr(device_reg, "async_get_device"):
+            current_dev = device_reg.async_get_device(identifiers={(DOMAIN, speaker.device_id)})
+            current_area = getattr(current_dev, "area_id", None) if current_dev else None
+            if not current_area:
+                current_area = _resolve_speaker_area(device_reg, speaker)
+                if current_area and current_dev and hasattr(device_reg, "async_update_device"):
+                    device_reg.async_update_device(current_dev.id, area_id=current_area)
+            if state is not None:
+                area_changed = state.assigned_area != current_area
+                state.assigned_area = current_area
+                state.bermuda_area_ready = current_area is not None
+                if area_changed:
+                    state.notify_callbacks()
+            if current_area:
+                _sync_bluetooth_scanner_area(device_reg, speaker.mac_address, current_area)
 
         is_playing = False
         if playback_mode != MODE_IGNORE:

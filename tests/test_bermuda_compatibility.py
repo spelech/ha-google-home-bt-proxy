@@ -1,16 +1,22 @@
-"""Tests verifying compatibility with Bermuda Bluetooth Proxy (v0.8.7)."""
-
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.helpers import device_registry as dr
 
-from custom_components.google_home_bt_proxy import async_setup_entry
+from custom_components.google_home_bt_proxy import (
+    _resolve_speaker_area,
+    _speaker_scan_loop,
+    _sync_bluetooth_scanner_area,
+    async_setup_entry,
+)
 from custom_components.google_home_bt_proxy.api import GoogleHomeApiClient
 from custom_components.google_home_bt_proxy.button import GoogleHomeBtProxyScanButton
 from custom_components.google_home_bt_proxy.const import (
     CONF_BERMUDA_MODE,
     CONF_FILTER_PEER_PROXIES,
+    CONF_SCAN_INTERVAL,
+    CONF_SCAN_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SCAN_TIMEOUT,
     DOMAIN,
@@ -212,8 +218,10 @@ async def test_async_setup_bermuda_registration():
     mock_coordinator.async_get_speakers = AsyncMock(return_value=[speaker])
 
     mock_devreg = MagicMock()
+    mock_devreg.async_get_device.return_value = None
     mock_speaker_dev_entry = MagicMock()
     mock_speaker_dev_entry.id = "devreg_speaker_kitchen_id"
+    mock_speaker_dev_entry.area_id = None
     mock_devreg.async_get_or_create.return_value = mock_speaker_dev_entry
 
     with (
@@ -249,6 +257,7 @@ async def test_async_setup_bermuda_registration():
             name=speaker.name,
             manufacturer="Google",
             model=speaker.hardware,
+            suggested_area=None,
         )
 
         # Verify bluetooth scanner registration includes source_config_entry_id and source_device_id
@@ -381,7 +390,12 @@ def test_scanner_status_sensor_bermuda_attributes():
         auth_token="token",
         mac_address="6C:AD:F8:12:34:56",
     )
-    state = SpeakerProxyState(bermuda_mode=True, rssi_mode="raw")
+    state = SpeakerProxyState(
+        bermuda_mode=True,
+        rssi_mode="raw",
+        assigned_area="office",
+        bermuda_area_ready=True,
+    )
 
     sensor = GoogleHomeBtProxyStatusSensor(speaker, state)
     attrs = sensor.extra_state_attributes
@@ -391,6 +405,8 @@ def test_scanner_status_sensor_bermuda_attributes():
     assert attrs["bermuda_compatible"] is True
     assert attrs["bermuda_mode"] is True
     assert attrs["rssi_mode"] == "raw"
+    assert attrs["assigned_area"] == "office"
+    assert attrs["bermuda_area_ready"] is True
 
 
 @pytest.mark.asyncio
@@ -438,3 +454,328 @@ async def test_options_flow_bermuda_mode_configuration():
     speaker_schema_keys = [k.schema for k in res_speaker["data_schema"].schema.keys()]
     assert CONF_BERMUDA_MODE in speaker_schema_keys
     assert CONF_FILTER_PEER_PROXIES in speaker_schema_keys
+
+
+def test_resolve_speaker_area_own_domain():
+    """Verify _resolve_speaker_area finds area from own domain device entry."""
+    speaker = SpeakerNode(
+        device_id="spk_living",
+        name="Living Room Speaker",
+        ip_address="192.168.1.50",
+        auth_token="token",
+        mac_address="AA:BB:CC:DD:EE:01",
+    )
+    mock_devreg = MagicMock()
+    mock_dev = MagicMock()
+    mock_dev.area_id = "living_room"
+    mock_devreg.async_get_device.side_effect = lambda **kwargs: (
+        mock_dev if kwargs.get("identifiers") == {(DOMAIN, speaker.device_id)} else None
+    )
+
+    area = _resolve_speaker_area(mock_devreg, speaker)
+    assert area == "living_room"
+
+
+def test_resolve_speaker_area_cast_domain():
+    """Verify _resolve_speaker_area falls back to google_home / cast domain identifiers."""
+    speaker = SpeakerNode(
+        device_id="spk_kitchen",
+        name="Kitchen Speaker",
+        ip_address="192.168.1.51",
+        auth_token="token",
+        mac_address="AA:BB:CC:DD:EE:02",
+    )
+    mock_devreg = MagicMock()
+    mock_dev = MagicMock()
+    mock_dev.area_id = "kitchen"
+    mock_devreg.async_get_device.side_effect = lambda **kwargs: (
+        mock_dev if kwargs.get("identifiers") == {("cast", speaker.device_id)} else None
+    )
+
+    area = _resolve_speaker_area(mock_devreg, speaker)
+    assert area == "kitchen"
+
+
+def test_resolve_speaker_area_mac_connection():
+    """Verify _resolve_speaker_area matches on network MAC connection."""
+    speaker = SpeakerNode(
+        device_id="spk_bedroom",
+        name="Bedroom Speaker",
+        ip_address="192.168.1.52",
+        auth_token="token",
+        mac_address="AA:BB:CC:DD:EE:03",
+    )
+    mock_devreg = MagicMock()
+    mock_dev = MagicMock()
+    mock_dev.area_id = "bedroom"
+    mock_devreg.async_get_device.side_effect = lambda **kwargs: (
+        mock_dev
+        if kwargs.get("connections") == {(dr.CONNECTION_NETWORK_MAC, "aa:bb:cc:dd:ee:03")}
+        else None
+    )
+
+    area = _resolve_speaker_area(mock_devreg, speaker)
+    assert area == "bedroom"
+
+
+def test_resolve_speaker_area_friendly_name():
+    """Verify _resolve_speaker_area matches on device friendly name."""
+    speaker = SpeakerNode(
+        device_id="spk_dining",
+        name="Dining Room Speaker",
+        ip_address="192.168.1.53",
+        auth_token="token",
+        mac_address="AA:BB:CC:DD:EE:04",
+    )
+    mock_devreg = MagicMock()
+    mock_devreg.async_get_device.return_value = None
+    matched_dev = MagicMock()
+    matched_dev.name = "Dining Room Speaker"
+    matched_dev.name_by_user = None
+    matched_dev.area_id = "dining_room"
+    mock_devreg.devices = {"dev1": matched_dev}
+
+    area = _resolve_speaker_area(mock_devreg, speaker)
+    assert area == "dining_room"
+
+
+def test_resolve_speaker_area_none():
+    """Verify _resolve_speaker_area returns None when no device or area is found."""
+    speaker = SpeakerNode(
+        device_id="spk_unassigned",
+        name="Unassigned Speaker",
+        ip_address="192.168.1.54",
+        auth_token="token",
+        mac_address="AA:BB:CC:DD:EE:05",
+    )
+    mock_devreg = MagicMock()
+    mock_devreg.async_get_device.return_value = None
+    mock_devreg.devices = {}
+
+    area = _resolve_speaker_area(mock_devreg, speaker)
+    assert area is None
+    assert _resolve_speaker_area(None, speaker) is None
+
+
+def test_sync_bluetooth_scanner_area():
+    """Verify _sync_bluetooth_scanner_area updates bluetooth scanner device area_id."""
+    mock_devreg = MagicMock()
+    bt_dev = MagicMock()
+    bt_dev.id = "bt_scanner_device_id"
+    bt_dev.area_id = "old_area"
+    mock_devreg.async_get_device.return_value = bt_dev
+
+    # Update area when different
+    _sync_bluetooth_scanner_area(mock_devreg, "AA:BB:CC:DD:EE:01", "new_area")
+    mock_devreg.async_update_device.assert_called_once_with(
+        "bt_scanner_device_id", area_id="new_area"
+    )
+
+    # Do not update if area is already matching
+    mock_devreg.reset_mock()
+    bt_dev.area_id = "new_area"
+    _sync_bluetooth_scanner_area(mock_devreg, "AA:BB:CC:DD:EE:01", "new_area")
+    mock_devreg.async_update_device.assert_not_called()
+
+    # Do nothing if device is not found or devreg is None
+    mock_devreg.reset_mock()
+    mock_devreg.async_get_device.return_value = None
+    _sync_bluetooth_scanner_area(mock_devreg, "AA:BB:CC:DD:EE:01", "new_area")
+    mock_devreg.async_update_device.assert_not_called()
+    _sync_bluetooth_scanner_area(None, "AA:BB:CC:DD:EE:01", "new_area")
+
+
+@pytest.mark.asyncio
+async def test_async_setup_with_area_inheritance_and_eureka():
+    """Verify async_setup_entry queries eureka_info and inherits area for Bermuda."""
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    mock_hass.async_create_background_task.side_effect = lambda target, name=None: (
+        target.close(),
+        MagicMock(),
+    )[1]
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test_entry_bermuda_area"
+    mock_entry.data = {}
+    mock_entry.options = {}
+
+    speaker = SpeakerNode(
+        device_id="spk_office_area",
+        name="Office Speaker",
+        ip_address="192.168.1.55",
+        auth_token="token",
+        hardware="Google Home Mini",
+        mac_address="02:00:00:00:00:01",
+    )
+
+    mock_coordinator = MagicMock()
+    mock_coordinator.async_get_speakers = AsyncMock(return_value=[speaker])
+
+    mock_api_client = MagicMock()
+
+    async def mock_get_device_info(spk):
+        spk.mac_address = "6C:AD:F8:12:34:56"
+        return {"device_info": {"mac_address": "6C:AD:F8:12:34:56"}}
+
+    mock_api_client.get_device_info = AsyncMock(side_effect=mock_get_device_info)
+
+    mock_devreg = MagicMock()
+    existing_cast_dev = MagicMock()
+    existing_cast_dev.area_id = "office"
+
+    mock_speaker_dev_entry = MagicMock()
+    mock_speaker_dev_entry.id = "devreg_speaker_office_id"
+    mock_speaker_dev_entry.area_id = None
+
+    def devreg_get_device(**kwargs):
+        if kwargs.get("identifiers") == {("cast", speaker.device_id)}:
+            return existing_cast_dev
+        if kwargs.get("connections") == {(dr.CONNECTION_BLUETOOTH, "6C:AD:F8:12:34:56")}:
+            bt_scanner_entry = MagicMock()
+            bt_scanner_entry.id = "bt_scanner_entry_id"
+            bt_scanner_entry.area_id = None
+            return bt_scanner_entry
+        return None
+
+    mock_devreg.async_get_device.side_effect = devreg_get_device
+    mock_devreg.async_get_or_create.return_value = mock_speaker_dev_entry
+    mock_devreg.async_update_device.return_value = MagicMock(area_id="office")
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator",
+            return_value=mock_coordinator,
+        ),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeApiClient",
+            return_value=mock_api_client,
+        ),
+        patch(
+            "custom_components.google_home_bt_proxy.dr.async_get",
+            return_value=mock_devreg,
+        ),
+        patch(
+            "custom_components.google_home_bt_proxy.bluetooth.async_register_scanner",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.google_home_bt_proxy.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.google_home_bt_proxy.zeroconf.async_get_instance",
+            return_value=MagicMock(),
+        ),
+    ):
+        result = await async_setup_entry(mock_hass, mock_entry)
+        assert result is True
+
+        # Verify eureka_info called to resolve hardware MAC
+        mock_api_client.get_device_info.assert_called_once_with(speaker)
+        assert speaker.mac_address == "6C:AD:F8:12:34:56"
+
+        # Verify speaker device created with suggested_area
+        mock_devreg.async_get_or_create.assert_called_once_with(
+            config_entry_id=mock_entry.entry_id,
+            identifiers={(DOMAIN, speaker.device_id)},
+            connections={(dr.CONNECTION_NETWORK_MAC, "6c:ad:f8:12:34:56")},
+            name=speaker.name,
+            manufacturer="Google",
+            model=speaker.hardware,
+            suggested_area="office",
+        )
+
+        # Verify proxy state has assigned_area and bermuda_area_ready
+        stored_data = mock_hass.data[DOMAIN][mock_entry.entry_id]
+        state = stored_data["speakers"]["spk_office_area"]["state"]
+        assert state.assigned_area == "office"
+        assert state.bermuda_area_ready is True
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_dynamic_area_sync():
+    """Verify _speaker_scan_loop dynamically updates assigned_area and syncs bluetooth scanner."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {
+        CONF_SCAN_TIMEOUT: 0.01,
+        CONF_SCAN_INTERVAL: 0.01,
+    }
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    speaker = SpeakerNode(
+        device_id="spk_dynamic_area",
+        name="Dynamic Area Speaker",
+        ip_address="192.168.1.56",
+        auth_token="token",
+        mac_address="6C:AD:F8:12:34:77",
+    )
+    mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
+    # Initial state has no area
+    state = SpeakerProxyState(
+        bermuda_mode=True,
+        rssi_mode="raw",
+        assigned_area=None,
+        bermuda_area_ready=False,
+    )
+    callback_called = False
+
+    def on_state_change():
+        nonlocal callback_called
+        callback_called = True
+
+    state.register_callback(on_state_change)
+
+    # Mock device registry where the speaker device now has an assigned area
+    mock_devreg = MagicMock()
+    mock_speaker_dev = MagicMock()
+    mock_speaker_dev.id = "speaker_dev_id"
+    mock_speaker_dev.area_id = "master_bedroom"
+
+    mock_bt_dev = MagicMock()
+    mock_bt_dev.id = "bt_dev_id"
+    mock_bt_dev.area_id = None
+
+    def devreg_get_device(**kwargs):
+        if kwargs.get("identifiers") == {(DOMAIN, speaker.device_id)}:
+            return mock_speaker_dev
+        if kwargs.get("connections") == {(dr.CONNECTION_BLUETOOTH, "6C:AD:F8:12:34:77")}:
+            return mock_bt_dev
+        return None
+
+    mock_devreg.async_get_device.side_effect = devreg_get_device
+
+    with patch("custom_components.google_home_bt_proxy.dr.async_get", return_value=mock_devreg):
+        loop_task = asyncio.create_task(
+            _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                speaker,
+                mock_scanner,
+                initial_delay=0.01,
+                playback_detector=mock_detector,
+                state=state,
+            )
+        )
+
+        await asyncio.sleep(0.05)
+        loop_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await loop_task
+
+    # Verify state updated dynamically and notified listeners
+    assert state.assigned_area == "master_bedroom"
+    assert state.bermuda_area_ready is True
+    assert callback_called is True
+
+    # Verify bluetooth scanner device was updated with the new area
+    mock_devreg.async_update_device.assert_called_with("bt_dev_id", area_id="master_bedroom")
