@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-09-07
+
+### Added
+- **HACS & Brand Assets**:
+  - Added official brand assets in `custom_components/google_home_bt_proxy/brand/` (`icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png`) and root `icon.png`/`logo.png` for HACS and Home Assistant 2024+ brand resolution.
+- **In-UI Field Descriptors & Translations**:
+  - Added dedicated `translations/en.json` directory so Home Assistant properly registers and displays all component UI strings at runtime.
+  - Added detailed in-UI helper descriptions (`data_description`) under every single configuration and options field explaining expected formats and values.
+
 ## [1.0.1] - 2026-09-07
 
 ### Improved
