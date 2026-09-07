@@ -3,13 +3,11 @@
     "step": {
       "user": {
         "title": "Google Home Authentication",
-        "description": "Authenticate with the Google account that manages your speakers.\n\n**Option 1: Google App Password (Easiest)**\nEnter your Google Account Email and a 16-character App Password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Leave Master Token, OAuth Token, and Android ID blank.\n\n**Option 2: Browser Extension (Automated)**\nUse the companion extension in `extensions/google_home_auth_extension`. In the extension popup, enter Flow ID `{flow_id}` and click 'Start Google Login'. It will complete this setup automatically.\n\n**Option 3: Master Token**\nEnter your Google Account Email and Master Token (`oauth2_rt_...` or `aas_et/...`).\n\n*(Note: Standard Google passwords do not work on accounts with 2-Step Verification. Android ID is generated automatically if omitted.)*",
+        "description": "Authenticate with the Google account that manages your Google Home speakers.\n\n**App Password (Recommended)**: Enter your Google Account Email and an App Password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).\n\n**Master Token**: If you already have a master token (or oauth token), enter your email and paste the token into Master Token.",
         "data": {
           "username": "Google Account Email",
-          "password": "App Password (from myaccount.google.com/apppasswords)",
-          "master_token": "Master Token (Optional, oauth2_rt_...)",
-          "oauth_token": "OAuth Token (Optional, oauth2_4/...)",
-          "android_id": "Android ID (Optional, auto-generated if blank)"
+          "password": "App Password",
+          "master_token": "Master Token (Optional)"
         }
       },
       "import_existing": {

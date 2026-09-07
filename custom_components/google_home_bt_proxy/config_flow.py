@@ -107,38 +107,53 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if key in user_input and isinstance(user_input[key], str):
                 user_input[key] = user_input[key].strip()
 
-        if user_input.get(CONF_MASTER_TOKEN):
-            return True
+        from glocaltokens.client import get_android_id  # type: ignore[attr-defined]
 
-        if user_input.get(CONF_OAUTH_TOKEN):
-            if not user_input.get(CONF_USERNAME):
+        android_id = user_input.get(CONF_ANDROID_ID) or get_android_id()
+        user_input[CONF_ANDROID_ID] = android_id
+
+        master_token = user_input.get(CONF_MASTER_TOKEN, "")
+        oauth_token = user_input.get(CONF_OAUTH_TOKEN, "")
+        username = user_input.get(CONF_USERNAME, "")
+        password = user_input.get(CONF_PASSWORD, "")
+
+        # Auto-detect if user entered an oauth token into master_token field
+        if master_token.startswith("oauth2_4/"):
+            oauth_token = master_token
+            master_token = ""
+
+        if oauth_token:
+            if not username:
                 return False
-            from glocaltokens.client import get_android_id  # type: ignore[attr-defined]
-
-            android_id = user_input.get(CONF_ANDROID_ID) or get_android_id()
-            username = user_input.get(CONF_USERNAME, "")
-            oauth_token = user_input.get(CONF_OAUTH_TOKEN, "")
 
             def _exchange() -> dict[str, Any]:
                 return gpsoauth.exchange_token(username, oauth_token, android_id)
 
             res = await self.hass.async_add_executor_job(_exchange)
-            if "Token" in res:
+            if isinstance(res, dict) and "Token" in res:
                 user_input[CONF_MASTER_TOKEN] = res["Token"]
-                user_input[CONF_ANDROID_ID] = android_id
                 user_input.pop(CONF_OAUTH_TOKEN, None)
                 return True
             _LOGGER.warning("OAuth token exchange failed: %s", res)
             return False
 
-        client = GLocalAuthenticationTokens(
-            username=user_input.get(CONF_USERNAME),
-            password=user_input.get(CONF_PASSWORD),
-            master_token=user_input.get(CONF_MASTER_TOKEN),
-            android_id=user_input.get(CONF_ANDROID_ID),
-        )
-        token = await self.hass.async_add_executor_job(client.get_master_token)
-        return bool(token)
+        if master_token:
+            return True
+
+        if username and password:
+            client = GLocalAuthenticationTokens(
+                username=username,
+                password=password,
+                master_token=None,
+                android_id=android_id,
+            )
+            token = await self.hass.async_add_executor_job(client.get_master_token)
+            if token:
+                user_input[CONF_MASTER_TOKEN] = token
+                return True
+            return False
+
+        return False
 
     def _show_config_form(self, errors: dict[str, str] | None = None) -> ConfigFlowResult:
         """Show configuration form for manual input."""
@@ -147,8 +162,6 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_USERNAME, default=""): str,
                 vol.Optional(CONF_PASSWORD, default=""): str,
                 vol.Optional(CONF_MASTER_TOKEN, default=""): str,
-                vol.Optional(CONF_OAUTH_TOKEN, default=""): str,
-                vol.Optional(CONF_ANDROID_ID, default=""): str,
             }
         )
         return self.async_show_form(

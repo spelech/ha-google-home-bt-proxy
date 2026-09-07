@@ -361,6 +361,35 @@ async def test_config_flow_oauth_token_exchange_success():
 
 
 @pytest.mark.asyncio
+async def test_config_flow_oauth_token_in_master_token_field():
+    """Test oauth token pasted into master_token field is auto-detected and exchanged."""
+    flow = GoogleHomeBtProxyConfigFlow()
+    mock_hass = MagicMock()
+
+    async def _mock_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_mock_executor)
+    flow.hass = mock_hass
+
+    user_input = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_MASTER_TOKEN: "oauth2_4/test_token_in_master_field",
+    }
+    with patch(
+        "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+        return_value={"Token": "aas_et/generated_master_token"},
+    ) as mock_exchange:
+        result = await flow.async_step_user(user_input)
+        assert result["type"] == FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_MASTER_TOKEN] == "aas_et/generated_master_token"
+        assert CONF_OAUTH_TOKEN not in result["data"]
+        assert result["data"][CONF_USERNAME] == "user@gmail.com"
+        assert CONF_ANDROID_ID in result["data"]
+        mock_exchange.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_config_flow_oauth_token_exchange_failure():
     """Test failed oauth token exchange shows invalid_auth."""
     flow = GoogleHomeBtProxyConfigFlow()
