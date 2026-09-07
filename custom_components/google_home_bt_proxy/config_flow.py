@@ -97,6 +97,16 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _validate_credentials(self, user_input: dict[str, Any]) -> bool:
         """Verify the provided credentials or master token."""
+        for key in (
+            CONF_USERNAME,
+            CONF_PASSWORD,
+            CONF_MASTER_TOKEN,
+            CONF_OAUTH_TOKEN,
+            CONF_ANDROID_ID,
+        ):
+            if key in user_input and isinstance(user_input[key], str):
+                user_input[key] = user_input[key].strip()
+
         if user_input.get(CONF_MASTER_TOKEN):
             return True
 
@@ -141,7 +151,12 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_ANDROID_ID, default=""): str,
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema, errors=errors or {})
+        return self.async_show_form(
+            step_id="user",
+            data_schema=schema,
+            errors=errors or {},
+            description_placeholders={"flow_id": getattr(self, "flow_id", "") or ""},
+        )
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle the initial step."""
