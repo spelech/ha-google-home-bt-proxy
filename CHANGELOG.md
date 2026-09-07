@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-07
+
+### Improved
+- **Streamlined Authentication Flow**:
+  - Simplified the initial configuration dialog to 3 clean fields: Google Account Email, App Password, and Master Token (Optional).
+  - Automatically generate `android_id` in the background without user intervention.
+  - Automatically detect and exchange `oauth2_4/...` tokens pasted into the Master Token field.
+  - Added 1-click automatic credential import when `ha-google-home` is installed.
+  - Added immediate actionable troubleshooting guidance for accounts triggering Google browser security checks.
+- **Visual Authentication Guide**:
+  - Added `docs/authentication_guide.md` with step-by-step instructions and DevTools extraction screenshots.
+
 ## [1.0.0] - 2026-09-06
 
 ### Added
