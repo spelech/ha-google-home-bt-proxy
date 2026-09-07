@@ -113,16 +113,18 @@ For a detailed step-by-step walkthrough with visual screenshots, see the [Authen
 Click **Configure** on the integration card to adjust settings globally or for specific speakers:
 
 - **Configure Settings For**: Choose `Global Settings` or a specific speaker to customize.
+- **Bermuda BLE Optimization Mode** (`bermuda_mode`): Auto-optimizes RF packets for Bermuda BLE Trilateration (default: `true` if Bermuda is installed, else `false`).
+- **Filter Peer Speakers** (`filter_peer_proxies`): Automatically suppresses BLE packets emitted by peer Google Home/Nest speakers (default: `true`).
 - **Multi-Speaker Orchestration** (`orchestration_mode`): `round_robin` to serialize scans across speakers, or `independent` (default: `round_robin`).
-- **Idle Scan Duration** (`scan_timeout`): Duration in seconds for each active scan (default: `5s`).
-- **Idle Scan Interval** (`scan_interval`): Pause between scans in seconds (default: `10s`).
-- **Playback Scan Duration / Interval** (`playing_scan_timeout`, `playing_scan_interval`): Scan timing while media is playing.
+- **Idle Scan Duration** (`scan_timeout`): Duration in seconds for each active scan (default: `4s`).
+- **Idle Scan Interval** (`scan_interval`): Pause between scans in seconds (default: `4s`, ensures total cycle $\le 10\text{s}$).
+- **Playback Scan Duration / Interval** (`playing_scan_timeout`, `playing_scan_interval`): Scan timing while media is playing (defaults: `2s` and `30s`).
 - **Playback Handling Mode** (`playback_mode`): `throttle` (slower scans during playback), `skip_ceiling` (pause until max duration), or `ignore` (default: `throttle`).
 - **Minimum RSSI Threshold** (`rssi_threshold`): Minimum signal level in dBm to ingest (default: `-90 dBm`).
-- **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied to incoming signals (default: `0 dBm`).
+- **RSSI Calibration Offset** (`rssi_offset`): Hardware calibration adjustment in dBm applied to incoming signals (default: `0 dBm`; bypassed in Bermuda Mode).
 - **Target Filter Mode** (`filter_mode`): `all`, `known_only` (named or IRK-resolved devices), or `whitelist` (default: `all`).
 - **Tracked Devices** (`tracked_devices`): Comma-separated list of MAC addresses, prefixes (e.g. `AA:BB:CC`), or name substrings.
-- **Enable RSSI Smoothing** (`enable_rssi_smoothing`): Enables rolling smoothing filter (default: `true`).
+- **Enable RSSI Smoothing** (`enable_rssi_smoothing`): Enables rolling smoothing filter (default: `true`; bypassed in Bermuda Mode).
 - **RSSI Smoothing Algorithm** (`rssi_filter_mode`): `none`, `median`, or `ema` (default: `median`).
 - **Smoothing Window Size** (`rssi_filter_window`): Number of samples kept for smoothing (default: `3`).
 - **Enable Distance Estimation** (`enable_distance_estimation`): Enables distance calculation and distance gating (default: `true`).
@@ -133,17 +135,29 @@ Click **Configure** on the integration card to adjust settings globally or for s
 
 ---
 
-## Bermuda Integration
+## Bermuda Integration & Architecture
 
-[Bermuda](https://github.com/agittins/bermuda) is a Home Assistant integration that tracks BLE devices (beacons, phones, wearables) and estimates room presence using Bluetooth proxy RSSI data.
+[Bermuda BLE Trilateration](https://github.com/agittins/bermuda) is a Home Assistant integration that tracks BLE devices (beacons, smart watches, phones) and performs real-time room presence estimation using Bluetooth proxy data.
 
-`ha-google-home-bt-proxy` is engineered for native, seamless compatibility with Bermuda (tested against Bermuda v0.8.7):
+`ha-google-home-bt-proxy` includes native, first-class compatibility with Bermuda (validated against Bermuda v0.8.7+).
 
-1. **Automatic Device Registry Linkage**: Each speaker registers network MAC connections `(dr.CONNECTION_NETWORK_MAC, mac.lower())`, allowing Bermuda's scanner resolver to discover `address_wifi_mac` and automatically inherit the speaker's assigned Home Assistant Area.
-2. **Bermuda BLE Optimization Mode (`bermuda_mode`)**: When enabled (or automatically detected if Bermuda is loaded in HA), the proxy forwards **pure raw instantaneous RSSI** (bypassing rolling median/EMA filters) and zeroes proxy offsets ($0\text{ dBm}$), enabling Bermuda's native asymmetric velocity-limiting filter to operate without signal lag.
-3. **Peer Proxy Suppression (`filter_peer_proxies`)**: Automatically filters out BLE advertisement packets emitted by peer Google Home / Nest speakers (accounting for $\pm 3$ MAC math offsets), preventing crosstalk and ghost devices.
-4. **Sub-10s Scan Timing**: Default idle scan timings ($4\text{s}$ scan + $4\text{s}$ interval = $8\text{s}$ total cycle) remain strictly within Bermuda's `AREA_MAX_AD_AGE` ($10.0\text{s}$) threshold so advertisements never go stale in area presence contests.
-5. **Scanner Calibration**: In Bermuda Mode, set scanner offsets directly in Bermuda's settings (**Configure Bermuda** > **Scanner Offsets**). If running standalone without Bermuda, use the proxy's per-speaker `rssi_offset` setting. See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for details.
+### Bermuda Optimization Mode Settings & Why They Are Required
+
+When **Bermuda Mode** is active (`bermuda_mode: true`), the integration automatically enforces specific RF ingestion rules. Here is why each setting is designed this way based on Bermuda's internal architecture:
+
+| Setting / Feature | Value in Bermuda Mode | Why It Has To Be That Way |
+| :--- | :--- | :--- |
+| **Proxy RSSI Smoothing** | **Disabled** (Raw Passthrough) | Bermuda's distance calculation (`bermuda_advert.py`) uses an **asymmetric velocity-limiting filter**. In RF physics, a stronger RSSI peak is almost always true line-of-sight, whereas weaker readings reflect temporary body/wall occlusion. Proxy-side rolling median or EMA filters clip these instantaneous peaks and add artificial phase delay, severely degrading Bermuda's ability to track moving targets. |
+| **Proxy RSSI Offset** | **0 dBm** (Bypassed) | Bermuda has its own built-in scanner calibration matrix (`CONF_RSSI_OFFSETS` in **Configure Bermuda** > **Configure Scanner Offsets**). Applying offsets inside the proxy causes double-calibration and throws off Bermuda's cross-scanner trilateration math. |
+| **Total Scan Cycle** | **$\le 10$ Seconds** ($4\text{s}$ scan + $4\text{s}$ interval) | Bermuda enforces a strict constant: `AREA_MAX_AD_AGE = max(DISTANCE_TIMEOUT / 3, UPDATE_INTERVAL * 2) = 10.0s`. Any Bluetooth advertisement packet older than 10.0 seconds is **disqualified from winning an area presence contest**, even if it is the closest proxy. Keeping total cycle time at 8 seconds ensures packets are always fresh. |
+| **Peer Proxy Suppression** | **Enabled** (`filter_peer_proxies`) | Google Home and Nest speakers broadcast their own Bluetooth inquiry responses. Without suppression, neighboring speakers register as ghost beacons, spam HA device registries, and create cross-proxy interference. The proxy filters out base MACs and Bermuda-style $\pm 3$ MAC math offsets (`mac_math_offset`). |
+| **Device Registry Connection** | `dr.CONNECTION_NETWORK_MAC` | Bermuda's scanner discovery (`bermuda_device.py:328-336`) cross-references active scanners against the Device Registry using `("mac", altmac)`. If this network connection is missing, Bermuda cannot discover the speaker's `address_wifi_mac` or Area assignment and refuses to instantiate `distance_to_<scanner>` sensors. |
+
+### Bermuda Calibration Guide
+
+1. **Keep Bermuda Mode Enabled**: Ensure **Bermuda BLE Optimization Mode** is checked in the proxy configuration.
+2. **Assign Areas in HA**: Assign each Google Home speaker to its physical room in Home Assistant (**Settings** > **Devices & Services** > **Google Home Bluetooth Proxy** > click device > assign Area). Bermuda will automatically inherit this area.
+3. **Calibrate Offsets Inside Bermuda**: If mixing Google Home Mini (Gen 1) and Nest Mini (Gen 2) units with ESPHome proxies, configure antenna offsets inside Bermuda (**Settings** > **Devices & Services** > **Bermuda** > **Configure** > **Configure Scanner Offsets**). See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for full calibration steps.
 
 ---
 
