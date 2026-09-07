@@ -20,7 +20,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Google authentication servers.",
-      "invalid_auth": "Authentication failed. Note: If using password login, you must use a 16-character Google App Password (from myaccount.google.com/apppasswords), not your standard Google account password."
+      "invalid_auth": "Authentication failed. Use a 16-character App Password (myaccount.google.com/apppasswords). If Google blocks password login, log in at https://accounts.google.com/EmbeddedSetup, copy the 'oauth_token' cookie from DevTools (F12 > Storage/Application > Cookies), and paste it into Master Token."
     }
   },
   "options": {

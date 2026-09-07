@@ -96,6 +96,20 @@ Restart Home Assistant.
    - **Master Token**: Enter your Google account email and Master Token (`aas_et/...` or `oauth2_4/...`). (Android ID is generated automatically in the background.)
 4. The integration discovers supported speakers on your local network and sets up Bluetooth scanner proxies for them.
 
+### Authentication Troubleshooting
+
+If Google rejects your login (`invalid_auth` or `BadAuthentication`):
+
+1. **Verify 2-Step Verification**: Google requires 2FA to generate App Passwords at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Standard account passwords will not work.
+2. **If Google Blocks App Passwords (Browser Verification Required)**:
+   Some Google accounts or network environments trigger Google's automated security verification. You can easily obtain a token via your browser without installing any tools:
+   - In your desktop browser, open: `https://accounts.google.com/EmbeddedSetup`
+   - Sign in to your Google account.
+   - Open Developer Tools (`F12` or `Ctrl+Shift+I` / `Cmd+Opt+I`).
+   - Go to **Application** (Chrome/Edge) or **Storage** (Firefox) > **Cookies** > `https://accounts.google.com`.
+   - Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`).
+   - In Home Assistant, enter your Google email and paste that token directly into the **Master Token** field. The integration will automatically exchange it for a permanent master token.
+
 ### Configuration Options
 
 Click **Configure** on the integration card to adjust settings globally or for specific speakers:
