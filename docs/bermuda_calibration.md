@@ -57,6 +57,16 @@ $$\text{Offset} = \text{Baseline RSSI} - \text{Measured RSSI}$$
 - Offset = -62 - (-68) = `+6 dBm`
 
 ### 4. Apply the Setting
+
+#### Option A: In Bermuda Mode (Recommended)
+When **Bermuda Mode** is enabled (`bermuda_mode: true`), the proxy forwards raw RSSI with 0 dBm offset, delegating all calibration to Bermuda:
+1. In Home Assistant, go to **Settings** > **Devices & Services** > **Bermuda BLE Trilateration**.
+2. Click **Configure** > **Configure Scanner Offsets**.
+3. Enter the calculated offset for your speaker scanner.
+4. Click **Submit**.
+
+#### Option B: Standalone Mode (Without Bermuda)
+If you are running the proxy without Bermuda:
 1. In Home Assistant, go to **Settings** > **Devices & Services** > **Google Home Bluetooth Proxy**.
 2. Click **Configure**, select the speaker, and enter the offset in **RSSI Calibration Offset**.
 3. Click **Submit**. The change takes effect on the next scan cycle.

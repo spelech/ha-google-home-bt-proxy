@@ -8,12 +8,20 @@ from homeassistant.helpers import device_registry as dr
 from custom_components.google_home_bt_proxy import async_setup_entry
 from custom_components.google_home_bt_proxy.api import GoogleHomeApiClient
 from custom_components.google_home_bt_proxy.button import GoogleHomeBtProxyScanButton
-from custom_components.google_home_bt_proxy.const import DOMAIN
+from custom_components.google_home_bt_proxy.const import (
+    CONF_BERMUDA_MODE,
+    CONF_FILTER_PEER_PROXIES,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SCAN_TIMEOUT,
+    DOMAIN,
+)
+from custom_components.google_home_bt_proxy.filter import SignalProcessor
 from custom_components.google_home_bt_proxy.models import (
     DiscoveredDevice,
     SpeakerNode,
     SpeakerProxyState,
     format_or_derive_mac,
+    mac_math_offset,
 )
 from custom_components.google_home_bt_proxy.scanner import GoogleHomeRemoteScanner
 from custom_components.google_home_bt_proxy.sensor import GoogleHomeBtProxyStatusSensor
@@ -274,3 +282,148 @@ def test_entity_device_info_connections():
     assert sensor.device_info["connections"] == expected_conn
     assert switch.device_info["connections"] == expected_conn
     assert button.device_info["connections"] == expected_conn
+
+
+def test_default_scan_timings_within_bermuda_area_max_ad_age():
+    """Verify default scan timings ensure total cycle <= 10s (Bermuda AREA_MAX_AD_AGE)."""
+    # Bermuda's AREA_MAX_AD_AGE = max(DISTANCE_TIMEOUT / 3, UPDATE_INTERVAL * 2) = 10.0s
+    # Any advertisement older than 10.0s is disqualified from winning area presence.
+    assert DEFAULT_SCAN_TIMEOUT == 4
+    assert DEFAULT_SCAN_INTERVAL == 4
+    total_cycle = DEFAULT_SCAN_TIMEOUT + DEFAULT_SCAN_INTERVAL
+    assert total_cycle <= 10
+
+
+def test_mac_math_offset_helper():
+    """Verify mac_math_offset correctly calculates alternate MAC addresses for Bermuda."""
+    base_mac = "AA:BB:CC:DD:EE:10"
+    assert mac_math_offset(base_mac, 0) == "AA:BB:CC:DD:EE:10"
+    assert mac_math_offset(base_mac, 1) == "AA:BB:CC:DD:EE:11"
+    assert mac_math_offset(base_mac, -1) == "AA:BB:CC:DD:EE:0F"
+    assert mac_math_offset("invalid_mac", 1) is None
+    assert mac_math_offset(None, 1) is None
+
+
+def test_bermuda_mode_forces_raw_rssi_and_zero_offset():
+    """Verify Bermuda Mode disables proxy smoothing and resets offset to 0."""
+    # When Bermuda mode is True, SignalProcessor must bypass smoothing and zero out offset
+    sp = SignalProcessor(
+        rssi_offset=6,
+        enable_rssi_smoothing=True,
+        bermuda_mode=True,
+    )
+    assert sp.bermuda_mode is True
+    assert sp.enable_rssi_smoothing is False
+    assert sp.rssi_offset == 0
+
+    device = DiscoveredDevice(mac_address="11:22:33:44:55:66", rssi=-65)
+    sig = sp.process(device)
+    assert sig.raw_rssi == -65
+    assert sig.calibrated_rssi == -65
+    assert sig.filtered_rssi == -65
+
+    # Scanner initialization with Bermuda mode
+    scanner = GoogleHomeRemoteScanner(
+        scanner_id="AA:BB:CC:DD:EE:FF",
+        name="Test Scanner",
+        rssi_offset=5,
+        bermuda_mode=True,
+    )
+    assert scanner.bermuda_mode is True
+    assert scanner.signal_processor.enable_rssi_smoothing is False
+    assert scanner.signal_processor.rssi_offset == 0
+
+
+def test_peer_proxy_mac_suppression():
+    """Verify SignalProcessor filters out peer Google Home proxy nodes."""
+    speaker_mac = "AA:BB:CC:DD:EE:01"
+    sp = SignalProcessor(
+        peer_macs={speaker_mac},
+        filter_peer_proxies=True,
+    )
+
+    peer_device = DiscoveredDevice(mac_address="AA:BB:CC:DD:EE:01", rssi=-55)
+    signal = sp.process(peer_device)
+    assert signal.is_allowed is False
+    assert signal.filter_reason == "Peer Google Home speaker proxy"
+
+    # Alt-mac offset of peer speaker
+    alt_peer_mac = mac_math_offset(speaker_mac, 1)
+    sp_with_alt = SignalProcessor(
+        peer_macs={speaker_mac, alt_peer_mac},
+        filter_peer_proxies=True,
+    )
+    alt_peer_device = DiscoveredDevice(mac_address=alt_peer_mac, rssi=-58)
+    signal_alt = sp_with_alt.process(alt_peer_device)
+    assert signal_alt.is_allowed is False
+    assert signal_alt.filter_reason == "Peer Google Home speaker proxy"
+
+    # Non-peer device passes through
+    regular_device = DiscoveredDevice(mac_address="22:33:44:55:66:77", rssi=-70)
+    sig_reg = sp.process(regular_device)
+    assert sig_reg.is_allowed is True
+
+    # When filter_peer_proxies is False, peer devices are allowed
+    sp_unfiltered = SignalProcessor(
+        peer_macs={speaker_mac},
+        filter_peer_proxies=False,
+    )
+    sig_unfiltered = sp_unfiltered.process(peer_device)
+    assert sig_unfiltered.is_allowed is True
+
+
+def test_scanner_status_sensor_bermuda_attributes():
+    """Verify Status Sensor exposes Bermuda diagnostic telemetry."""
+    speaker = SpeakerNode(
+        device_id="spk_office",
+        name="Office Speaker",
+        ip_address="192.168.1.60",
+        auth_token="token",
+        mac_address="6C:AD:F8:12:34:56",
+    )
+    state = SpeakerProxyState(bermuda_mode=True, rssi_mode="raw")
+
+    sensor = GoogleHomeBtProxyStatusSensor(speaker, state)
+    attrs = sensor.extra_state_attributes
+
+    assert attrs["scanner_mac"] == "6C:AD:F8:12:34:56"
+    assert attrs["wifi_mac"] == "6c:ad:f8:12:34:56"
+    assert attrs["bermuda_compatible"] is True
+    assert attrs["bermuda_mode"] is True
+    assert attrs["rssi_mode"] == "raw"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_bermuda_mode_configuration():
+    """Verify Options Flow presents Bermuda mode and peer proxy suppression options."""
+    from custom_components.google_home_bt_proxy.config_flow import (
+        GoogleHomeBtProxyOptionsFlowHandler,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-entry-bermuda-options"
+    mock_entry.options = {}
+
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    res_init = await handler.async_step_init(None)
+    assert res_init["type"] == "form"
+    schema_keys = [k.schema for k in res_init["data_schema"].schema.keys()]
+    assert CONF_BERMUDA_MODE in schema_keys
+    assert CONF_FILTER_PEER_PROXIES in schema_keys
+
+    # Save options with Bermuda mode enabled
+    res_save = await handler.async_step_init({
+        CONF_BERMUDA_MODE: True,
+        CONF_FILTER_PEER_PROXIES: True,
+    })
+    assert res_save["type"] == "create_entry"
+    assert res_save["data"][CONF_BERMUDA_MODE] is True
+    assert res_save["data"][CONF_FILTER_PEER_PROXIES] is True
+
+    # Test speaker overrides step
+    handler._selected_speaker = "spk_1"
+    res_speaker = await handler.async_step_speaker_settings(None)
+    assert res_speaker["type"] == "form"
+    speaker_schema_keys = [k.schema for k in res_speaker["data_schema"].schema.keys()]
+    assert CONF_BERMUDA_MODE in speaker_schema_keys
+    assert CONF_FILTER_PEER_PROXIES in speaker_schema_keys

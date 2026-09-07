@@ -18,10 +18,12 @@ from homeassistant.core import callback
 
 from .const import (
     CONF_ANDROID_ID,
+    CONF_BERMUDA_MODE,
     CONF_CUSTOM_SETTINGS,
     CONF_ENABLE_DISTANCE_ESTIMATION,
     CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
+    CONF_FILTER_PEER_PROXIES,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_MAX_DISTANCE,
@@ -44,9 +46,11 @@ from .const import (
     CONF_SPEAKER_OVERRIDES,
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_BERMUDA_MODE,
     DEFAULT_ENABLE_DISTANCE_ESTIMATION,
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
+    DEFAULT_FILTER_PEER_PROXIES,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
     DEFAULT_ORCHESTRATION_MODE,
@@ -366,6 +370,14 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     default=GLOBAL_SETTINGS,
                 ): vol.In(speaker_choices),
                 vol.Optional(
+                    CONF_BERMUDA_MODE,
+                    default=options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE),
+                ): bool,
+                vol.Optional(
+                    CONF_FILTER_PEER_PROXIES,
+                    default=options.get(CONF_FILTER_PEER_PROXIES, DEFAULT_FILTER_PEER_PROXIES),
+                ): bool,
+                vol.Optional(
                     CONF_ORCHESTRATION_MODE,
                     default=options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE),
                 ): vol.In([ORCHESTRATION_ROUND_ROBIN, ORCHESTRATION_INDEPENDENT]),
@@ -380,7 +392,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_SCAN_INTERVAL,
                     default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                ): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
                 vol.Optional(
                     CONF_PLAYING_SCAN_TIMEOUT,
                     default=options.get(CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT),
@@ -480,6 +492,20 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     default=has_custom,
                 ): bool,
                 vol.Optional(
+                    CONF_BERMUDA_MODE,
+                    default=existing_overrides.get(
+                        CONF_BERMUDA_MODE,
+                        options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE),
+                    ),
+                ): bool,
+                vol.Optional(
+                    CONF_FILTER_PEER_PROXIES,
+                    default=existing_overrides.get(
+                        CONF_FILTER_PEER_PROXIES,
+                        options.get(CONF_FILTER_PEER_PROXIES, DEFAULT_FILTER_PEER_PROXIES),
+                    ),
+                ): bool,
+                vol.Optional(
                     CONF_PLAYBACK_MODE,
                     default=existing_overrides.get(
                         CONF_PLAYBACK_MODE,
@@ -499,7 +525,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_SCAN_INTERVAL,
                         options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                     ),
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=60)),
+                ): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
                 vol.Optional(
                     CONF_PLAYING_SCAN_TIMEOUT,
                     default=existing_overrides.get(

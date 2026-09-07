@@ -137,10 +137,13 @@ Click **Configure** on the integration card to adjust settings globally or for s
 
 [Bermuda](https://github.com/agittins/bermuda) is a Home Assistant integration that tracks BLE devices (beacons, phones, wearables) and estimates room presence using Bluetooth proxy RSSI data.
 
-1. **Verify Proxies**: In **Settings** > **Devices & Services** > **Bluetooth**, verify that your speakers appear as remote Bluetooth scanners.
-2. **Assign Areas**: Assign each speaker device to its physical room in Home Assistant (e.g., Living Room, Kitchen).
-3. **Configure Bermuda**: In Bermuda settings, set the reference location for each scanner. Bermuda will use the proxy data for room presence tracking.
-4. **Calibrate Offsets**: If you use multiple speaker generations (such as Home Mini Gen 1 and Nest Mini Gen 2), set `rssi_offset` per speaker to align signal levels. See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for calibration steps.
+`ha-google-home-bt-proxy` is engineered for native, seamless compatibility with Bermuda (tested against Bermuda v0.8.7):
+
+1. **Automatic Device Registry Linkage**: Each speaker registers network MAC connections `(dr.CONNECTION_NETWORK_MAC, mac.lower())`, allowing Bermuda's scanner resolver to discover `address_wifi_mac` and automatically inherit the speaker's assigned Home Assistant Area.
+2. **Bermuda BLE Optimization Mode (`bermuda_mode`)**: When enabled (or automatically detected if Bermuda is loaded in HA), the proxy forwards **pure raw instantaneous RSSI** (bypassing rolling median/EMA filters) and zeroes proxy offsets ($0\text{ dBm}$), enabling Bermuda's native asymmetric velocity-limiting filter to operate without signal lag.
+3. **Peer Proxy Suppression (`filter_peer_proxies`)**: Automatically filters out BLE advertisement packets emitted by peer Google Home / Nest speakers (accounting for $\pm 3$ MAC math offsets), preventing crosstalk and ghost devices.
+4. **Sub-10s Scan Timing**: Default idle scan timings ($4\text{s}$ scan + $4\text{s}$ interval = $8\text{s}$ total cycle) remain strictly within Bermuda's `AREA_MAX_AD_AGE` ($10.0\text{s}$) threshold so advertisements never go stale in area presence contests.
+5. **Scanner Calibration**: In Bermuda Mode, set scanner offsets directly in Bermuda's settings (**Configure Bermuda** > **Scanner Offsets**). If running standalone without Bermuda, use the proxy's per-speaker `rssi_offset` setting. See [docs/bermuda_calibration.md](docs/bermuda_calibration.md) for details.
 
 ---
 

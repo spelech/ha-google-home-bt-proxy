@@ -61,9 +61,12 @@ MODE_THROTTLE: Final = "throttle"
 MODE_SKIP_CEILING: Final = "skip_ceiling"
 MODE_IGNORE: Final = "ignore"
 
+CONF_BERMUDA_MODE: Final = "bermuda_mode"
+CONF_FILTER_PEER_PROXIES: Final = "filter_peer_proxies"
+
 # Defaults
-DEFAULT_SCAN_TIMEOUT: Final = 5  # seconds for active scan
-DEFAULT_SCAN_INTERVAL: Final = 10  # seconds between scans
+DEFAULT_SCAN_TIMEOUT: Final = 4  # seconds for active scan
+DEFAULT_SCAN_INTERVAL: Final = 4  # seconds between scans (cycle <= 10s for Bermuda)
 DEFAULT_PLAYBACK_MODE: Final = MODE_THROTTLE
 DEFAULT_PLAYING_SCAN_TIMEOUT: Final = 2  # seconds for active scan during playback
 DEFAULT_PLAYING_SCAN_INTERVAL: Final = 30  # seconds between scans during playback
@@ -79,6 +82,8 @@ DEFAULT_MAX_DISTANCE: Final = 0.0  # 0.0 means disabled
 DEFAULT_REF_POWER: Final = -59  # dBm @ 1m
 DEFAULT_PATH_LOSS_EXPONENT: Final = 2.5
 DEFAULT_ORCHESTRATION_MODE: Final = ORCHESTRATION_ROUND_ROBIN
+DEFAULT_BERMUDA_MODE: Final = False
+DEFAULT_FILTER_PEER_PROXIES: Final = True
 
 
 # API Constants

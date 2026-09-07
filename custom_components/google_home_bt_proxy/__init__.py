@@ -19,10 +19,12 @@ from homeassistant.helpers.typing import ConfigType
 from .api import GoogleHomeApiClient, SpeakerConnectionError, TokenExpiredError
 from .const import (
     CONF_ANDROID_ID,
+    CONF_BERMUDA_MODE,
     CONF_DISABLED_SPEAKERS,
     CONF_ENABLE_DISTANCE_ESTIMATION,
     CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
+    CONF_FILTER_PEER_PROXIES,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_MAX_DISTANCE,
@@ -43,9 +45,11 @@ from .const import (
     CONF_SPEAKER_OVERRIDES,
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
+    DEFAULT_BERMUDA_MODE,
     DEFAULT_ENABLE_DISTANCE_ESTIMATION,
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
+    DEFAULT_FILTER_PEER_PROXIES,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
     DEFAULT_ORCHESTRATION_MODE,
@@ -69,7 +73,7 @@ from .const import (
 from .coordinator import GoogleHomeProxyCoordinator
 from .filter import SignalProcessor
 from .irk import IrkResolver, parse_irk_config
-from .models import SpeakerNode, SpeakerProxyState
+from .models import SpeakerNode, SpeakerProxyState, mac_math_offset
 from .orchestrator import ScanOrchestrator
 from .playback import SpeakerPlaybackDetector
 from .scanner import GoogleHomeRemoteScanner
@@ -123,7 +127,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unregister_callbacks: list[Callable[[], None]] = []
     worker_tasks: list[asyncio.Task[None]] = []
 
+    all_speaker_macs: set[str] = set()
+    for spk in active_speakers:
+        if spk.mac_address:
+            all_speaker_macs.add(spk.mac_address.upper())
+            norm = spk.mac_address.lower()
+            for offset in range(-3, 4):
+                if alt := mac_math_offset(norm, offset):
+                    all_speaker_macs.add(alt.upper())
+
+    is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+    default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
+
     for index, speaker in enumerate(active_speakers):
+        speaker_bermuda_mode = bool(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda
+            )
+        )
+        speaker_filter_peer_proxies = bool(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_FILTER_PEER_PROXIES, DEFAULT_FILTER_PEER_PROXIES
+            )
+        )
         speaker_rssi_offset = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
         )
@@ -183,6 +209,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             enable_rssi_smoothing=enable_rssi_smoothing,
             smoothing_mode=smoothing_mode,
             smoothing_window=smoothing_window,
+            bermuda_mode=speaker_bermuda_mode,
+            peer_macs=all_speaker_macs,
+            filter_peer_proxies=speaker_filter_peer_proxies,
         )
 
         device_registry = dr.async_get(hass)
@@ -207,9 +236,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             irk_resolver=irk_resolver,
             rssi_offset=speaker_rssi_offset,
             signal_processor=signal_processor,
+            bermuda_mode=speaker_bermuda_mode,
+            peer_macs=all_speaker_macs,
+            filter_peer_proxies=speaker_filter_peer_proxies,
         )
         scanners[speaker.device_id] = scanner
-        proxy_state = SpeakerProxyState(enabled=speaker.enabled)
+        rssi_mode = (
+            "raw"
+            if (speaker_bermuda_mode or not signal_processor.enable_rssi_smoothing)
+            else "smoothed"
+        )
+        proxy_state = SpeakerProxyState(
+            enabled=speaker.enabled,
+            bermuda_mode=speaker_bermuda_mode,
+            rssi_mode=rssi_mode,
+        )
         speakers_data[speaker.device_id] = {
             "speaker": speaker,
             "state": proxy_state,
@@ -341,12 +382,61 @@ async def _speaker_scan_loop(
         speaker_rssi_offset = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
         )
-        scanner._rssi_offset = speaker_rssi_offset
+        is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+        default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
+        speaker_bermuda_mode = bool(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda
+            )
+        )
+        speaker_filter_peer_proxies = bool(
+            _get_speaker_setting(
+                entry, speaker.device_id, CONF_FILTER_PEER_PROXIES, DEFAULT_FILTER_PEER_PROXIES
+            )
+        )
+        scanner.bermuda_mode = speaker_bermuda_mode
+        if state is not None:
+            state.bermuda_mode = speaker_bermuda_mode
 
         # Dynamically sync scanner signal processor and orchestrator settings
         if hasattr(scanner, "signal_processor"):
             sp = scanner.signal_processor
-            sp.rssi_offset = speaker_rssi_offset
+            sp.bermuda_mode = speaker_bermuda_mode
+            sp.filter_peer_proxies = speaker_filter_peer_proxies
+            if hasattr(coordinator, "speakers"):
+                all_peer_macs: set[str] = set()
+                for spk in coordinator.speakers.values():
+                    if spk.mac_address:
+                        all_peer_macs.add(spk.mac_address.upper())
+                        norm = spk.mac_address.lower()
+                        for offset in range(-3, 4):
+                            if alt := mac_math_offset(norm, offset):
+                                all_peer_macs.add(alt.upper())
+                sp.peer_macs = all_peer_macs
+
+            if speaker_bermuda_mode:
+                sp.enable_rssi_smoothing = False
+                sp.rssi_offset = 0
+                scanner._rssi_offset = 0
+            else:
+                sp.enable_rssi_smoothing = bool(
+                    _get_speaker_setting(
+                        entry,
+                        speaker.device_id,
+                        CONF_ENABLE_RSSI_SMOOTHING,
+                        DEFAULT_ENABLE_RSSI_SMOOTHING,
+                    )
+                )
+                sp.rssi_offset = speaker_rssi_offset
+                scanner._rssi_offset = speaker_rssi_offset
+
+            if state is not None:
+                state.rssi_mode = (
+                    "raw"
+                    if (speaker_bermuda_mode or not sp.enable_rssi_smoothing)
+                    else "smoothed"
+                )
+
             sp.filter_mode = _get_speaker_setting(
                 entry, speaker.device_id, CONF_FILTER_MODE, DEFAULT_FILTER_MODE
             )
@@ -371,14 +461,6 @@ async def _speaker_scan_loop(
             sp.path_loss_exponent = float(
                 _get_speaker_setting(
                     entry, speaker.device_id, CONF_PATH_LOSS_EXPONENT, DEFAULT_PATH_LOSS_EXPONENT
-                )
-            )
-            sp.enable_rssi_smoothing = bool(
-                _get_speaker_setting(
-                    entry,
-                    speaker.device_id,
-                    CONF_ENABLE_RSSI_SMOOTHING,
-                    DEFAULT_ENABLE_RSSI_SMOOTHING,
                 )
             )
             sp.smoother.mode = _get_speaker_setting(

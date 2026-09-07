@@ -640,14 +640,20 @@ async def test_speaker_scan_loop_disabled_and_immediate_trigger():
 
     with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
 
+        call_count = 0
+
         def sleep_side_effect(duration):
+            nonlocal call_count
+            call_count += 1
             if duration == 0.0:
                 return None
             elif duration == 1.0:
                 state.enabled = True
                 state.trigger_scan_event.set()
                 return None
-            elif duration == 5:
+            elif duration in (4, 5):
+                if call_count >= 5:
+                    raise asyncio.CancelledError()
                 return None
             else:
                 raise asyncio.CancelledError()

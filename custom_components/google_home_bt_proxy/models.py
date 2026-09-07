@@ -22,6 +22,24 @@ def format_or_derive_mac(device_id: str, raw_mac: str | None = None) -> str:
     return f"{first_byte:02X}:{h[1]:02X}:{h[2]:02X}:{h[3]:02X}:{h[4]:02X}:{h[5]:02X}"
 
 
+def mac_math_offset(mac: str | None, offset: int = 0) -> str | None:
+    """Calculate an offset MAC address, matching Bermuda's mac_math_offset."""
+    if not mac or not isinstance(mac, str):
+        return None
+    cleaned = mac.strip()
+    if len(cleaned) != 17 or cleaned.count(":") != 5:
+        return None
+    octet = cleaned[-2:]
+    try:
+        octet_int = bytes.fromhex(octet)[0]
+    except ValueError:
+        return None
+    if 0 <= (octet_new := octet_int + offset) <= 255:
+        prefix = cleaned[:-2]
+        return f"{prefix}{octet_new:02X}" if cleaned.isupper() else f"{prefix}{octet_new:02x}"
+    return None
+
+
 @dataclass
 class SpeakerNode:
     """Represents a physical Google Home / Nest speaker acting as a proxy node."""
@@ -66,6 +84,8 @@ class SpeakerProxyState:
     last_scan_duration: float = 0.0
     last_scan_timestamp: float | None = None
     enabled: bool = True
+    bermuda_mode: bool = True
+    rssi_mode: str = "raw"
     trigger_scan_event: asyncio.Event = field(default_factory=asyncio.Event)
     callbacks: list[Callable[[], None]] = field(default_factory=list)
 

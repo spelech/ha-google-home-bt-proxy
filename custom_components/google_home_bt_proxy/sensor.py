@@ -88,6 +88,11 @@ class GoogleHomeBtProxyStatusSensor(GoogleHomeBtProxyBaseSensor):
             "last_scan_duration": self._state.last_scan_duration,
             "last_scan_timestamp": self._state.last_scan_timestamp,
             "filtered_advertisements": self._state.filtered_advertisements,
+            "scanner_mac": self._speaker.mac_address.upper(),
+            "wifi_mac": self._speaker.mac_address.lower(),
+            "bermuda_compatible": True,
+            "bermuda_mode": self._state.bermuda_mode,
+            "rssi_mode": self._state.rssi_mode,
         }
 
 

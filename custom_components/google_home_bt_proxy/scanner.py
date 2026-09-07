@@ -7,6 +7,7 @@ import time
 
 from habluetooth import BaseHaRemoteScanner
 
+from .const import DEFAULT_BERMUDA_MODE, DEFAULT_FILTER_PEER_PROXIES
 from .filter import SignalProcessor
 from .irk import IrkResolver
 from .models import DiscoveredDevice
@@ -25,6 +26,9 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         irk_resolver: IrkResolver | None = None,
         rssi_offset: int = 0,
         signal_processor: SignalProcessor | None = None,
+        bermuda_mode: bool = DEFAULT_BERMUDA_MODE,
+        peer_macs: list[str] | set[str] | None = None,
+        filter_peer_proxies: bool = DEFAULT_FILTER_PEER_PROXIES,
     ) -> None:
         """Initialize the remote scanner."""
         super().__init__(
@@ -35,13 +39,20 @@ class GoogleHomeRemoteScanner(BaseHaRemoteScanner):
         )
         self.name = name
         self._irk_resolver = irk_resolver
-        self._rssi_offset = rssi_offset
-        self._signal_processor = signal_processor or SignalProcessor(rssi_offset=rssi_offset)
+        self.bermuda_mode = bermuda_mode
+        self._signal_processor = signal_processor or SignalProcessor(
+            rssi_offset=rssi_offset,
+            bermuda_mode=bermuda_mode,
+            peer_macs=peer_macs,
+            filter_peer_proxies=filter_peer_proxies,
+        )
+        self._rssi_offset = self._signal_processor.rssi_offset
         _LOGGER.debug(
-            "Initialized GoogleHomeRemoteScanner [%s] %s (offset: %d dBm)",
+            "Initialized GoogleHomeRemoteScanner [%s] %s (offset: %d dBm, bermuda_mode: %s)",
             scanner_id,
             name,
-            rssi_offset,
+            self._rssi_offset,
+            bermuda_mode,
         )
 
     @property

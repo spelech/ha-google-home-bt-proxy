@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .const import (
+    DEFAULT_BERMUDA_MODE,
     DEFAULT_ENABLE_DISTANCE_ESTIMATION,
     DEFAULT_ENABLE_RSSI_SMOOTHING,
+    DEFAULT_FILTER_PEER_PROXIES,
     DEFAULT_PATH_LOSS_EXPONENT,
     DEFAULT_REF_POWER,
     DEFAULT_RSSI_FILTER_MODE,
@@ -139,6 +141,9 @@ class SignalProcessor:
         enable_rssi_smoothing: bool = DEFAULT_ENABLE_RSSI_SMOOTHING,
         smoothing_mode: str = DEFAULT_RSSI_FILTER_MODE,
         smoothing_window: int = DEFAULT_RSSI_FILTER_WINDOW,
+        bermuda_mode: bool = DEFAULT_BERMUDA_MODE,
+        peer_macs: list[str] | set[str] | None = None,
+        filter_peer_proxies: bool = DEFAULT_FILTER_PEER_PROXIES,
     ) -> None:
         """Initialize the signal processor."""
         self.filter_mode = filter_mode
@@ -149,8 +154,22 @@ class SignalProcessor:
         self.max_distance = max(0.0, max_distance)
         self.ref_power = ref_power
         self.path_loss_exponent = path_loss_exponent
-        self.rssi_offset = rssi_offset
-        self.enable_rssi_smoothing = enable_rssi_smoothing
+        self.bermuda_mode = bermuda_mode
+        if bermuda_mode:
+            # Bermuda Mode: Force pure raw RSSI passthrough and zero proxy offset
+            # so Bermuda receives un-distorted instantaneous signals for its native algorithms
+            self.enable_rssi_smoothing = False
+            self.rssi_offset = 0
+        else:
+            self.enable_rssi_smoothing = enable_rssi_smoothing
+            self.rssi_offset = rssi_offset
+
+        self.filter_peer_proxies = filter_peer_proxies
+        self.peer_macs: set[str] = (
+            {m.strip().upper() for m in peer_macs if m and isinstance(m, str) and m.strip()}
+            if peer_macs
+            else set()
+        )
         self.smoother = RssiSmoothingFilter(mode=smoothing_mode, window_size=smoothing_window)
 
     def process(
@@ -161,6 +180,19 @@ class SignalProcessor:
     ) -> ProcessedSignal:
         """Process a single discovered device through the signal pipeline."""
         raw_rssi = device.rssi
+
+        # Check peer proxy suppression
+        if self.filter_peer_proxies and device.mac_address.upper() in self.peer_macs:
+            return ProcessedSignal(
+                filtered_rssi=raw_rssi,
+                raw_rssi=raw_rssi,
+                calibrated_rssi=raw_rssi,
+                estimated_distance=None,
+                is_allowed=False,
+                filter_reason="Peer Google Home speaker proxy",
+                samples_count=1,
+            )
+
         # Apply hardware calibration offset and clamp to [-127, 0] dBm
         calibrated_rssi = max(-127, min(0, raw_rssi + self.rssi_offset))
 

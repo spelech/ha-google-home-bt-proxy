@@ -11,8 +11,8 @@ from custom_components.google_home_bt_proxy.models import DiscoveredDevice, Spea
 def test_constants():
     """Verify integration constants."""
     assert DOMAIN == "google_home_bt_proxy"
-    assert DEFAULT_SCAN_INTERVAL == 10
-    assert DEFAULT_SCAN_TIMEOUT == 5
+    assert DEFAULT_SCAN_INTERVAL == 4
+    assert DEFAULT_SCAN_TIMEOUT == 4
 
 
 def test_speaker_node_model():
