@@ -211,9 +211,8 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Show configuration form for manual input."""
         schema = vol.Schema(
             {
-                vol.Optional(CONF_USERNAME, default=""): str,
-                vol.Optional(CONF_PASSWORD, default=""): str,
-                vol.Optional(CONF_MASTER_TOKEN, default=""): str,
+                vol.Required(CONF_USERNAME, default=self._email): str,
+                vol.Required(CONF_MASTER_TOKEN): str,
             }
         )
         return self.async_show_form(
@@ -233,9 +232,6 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if valid:
                     return self.async_create_entry(title=NAME, data=user_input)
                 errors["base"] = "invalid_auth"
-                # If password authentication failed, transition to token step
-                # so the user is not asked for the password again!
-                return await self.async_step_token(errors=errors)
             except Exception:
                 _LOGGER.exception("Unexpected exception in config flow")
                 errors["base"] = "cannot_connect"
@@ -269,36 +265,10 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
         errors: dict[str, str] | None = None,
     ) -> ConfigFlowResult:
-        """Handle token input step when password auth failed or token is used directly."""
-        step_errors = dict(errors or {})
-
-        if user_input is not None:
-            if not user_input.get(CONF_USERNAME) and self._email:
-                user_input[CONF_USERNAME] = self._email
-            elif user_input.get(CONF_USERNAME):
-                self._email = clean_string(user_input[CONF_USERNAME])
-
-            try:
-                valid = await self._validate_credentials(user_input)
-                if valid:
-                    return self.async_create_entry(title=NAME, data=user_input)
-                step_errors["base"] = "invalid_auth"
-            except Exception:
-                _LOGGER.exception("Unexpected exception in token config flow")
-                step_errors["base"] = "cannot_connect"
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_USERNAME, default=self._email): str,
-                vol.Required(CONF_MASTER_TOKEN): str,
-            }
-        )
-        return self.async_show_form(
-            step_id="token",
-            data_schema=schema,
-            errors=step_errors,
-            description_placeholders={"email": self._email or "your Google account"},
-        )
+        """Handle token input step (delegates to step_user)."""
+        if errors and user_input is None:
+            return self._show_config_form(errors=errors)
+        return await self.async_step_user(user_input)
 
     async def async_step_import_existing(
         self, user_input: dict[str, Any] | None = None

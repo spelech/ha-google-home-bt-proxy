@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-09-07
+
+### Improved
+- **Streamlined Setup to Auto-Import and Cookie Extraction**:
+  - Removed Google App Password fields and prompts from the initial configuration dialog. Since Google actively blocks automated password-based login (`gpsoauth`) on modern accounts, the setup now focuses strictly on the two working methods:
+    1. **1-Click Auto-Import** from existing `ha-google-home` installations.
+    2. **Browser Cookie Extraction** via `accounts.google.com/EmbeddedSetup` (`oauth_token` cookie `oauth2_4/...`).
+  - Greatly improves user experience by avoiding confusing login failures and eliminating password entry.
+
 ## [1.0.5] - 2026-09-07
 
 ### Security & Hardening

@@ -3,21 +3,19 @@
     "step": {
       "user": {
         "title": "Google Home Authentication",
-        "description": "Authenticate with the Google account that manages your Google Home / Nest speakers.\n\n• **Method 1 (Recommended): Google App Password**\nEnter your Google email and a 16-character App Password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Leave Master Token blank.\n\n• **Method 2: Token Authentication**\nIf password login fails or if Google requires browser verification, log into [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup), click **'I agree'**, copy the `oauth_token` cookie value (`oauth2_4/...`) from DevTools (F12 > Storage/Application > Cookies), close the tab, and paste it into Master Token. Leave App Password blank.\n\n*(Note: Standard Google passwords do not work if 2-Step Verification is enabled. Android device ID is generated automatically.)*",
+        "description": "Authenticate with the Google account that manages your Google Home / Nest speakers.\n\nTo retrieve your setup token in ~30 seconds:\n1. Open [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup) in a desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `https://accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For step-by-step screenshots, see the [Authentication Guide](https://github.com/spelech/ha-google-home-bt-proxy/blob/main/docs/authentication_guide.md).*",
         "data": {
           "username": "Google Account Email",
-          "password": "App Password (16 characters)",
-          "master_token": "Master Token or OAuth Token (Optional)"
+          "master_token": "OAuth Token or Master Token"
         },
         "data_description": {
           "username": "The full Google email address associated with your Google Home or Nest speakers.",
-          "password": "A 16-character App Password generated from your Google Account security settings. Do NOT use your standard personal account password.",
-          "master_token": "Optional. Paste an existing aas_et/... master token or an oauth2_4/... token extracted from accounts.google.com/EmbeddedSetup."
+          "master_token": "Paste the oauth_token cookie value (starts with oauth2_4/...) from accounts.google.com/EmbeddedSetup, or an existing aas_et/... master token."
         }
       },
       "token": {
         "title": "Google Account Token",
-        "description": "Google blocked password authentication for **{email}** (browser verification required).\n\nTo complete setup, retrieve your one-time setup token from your browser:\n1. Open [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup) in your desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `https://accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value and paste it below (you can close the browser tab after copying).\n\n*(You can paste the entire string like `oauth_token:\"oauth2_4/...\"` directly; it will be cleaned automatically).* \n\n*For visual screenshots, see the [Authentication Guide](https://github.com/spelech/ha-google-home-bt-proxy/blob/main/docs/authentication_guide.md).*",
+        "description": "To complete setup, retrieve your one-time setup token from your browser:\n1. Open [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup) in your desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `https://accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For visual screenshots, see the [Authentication Guide](https://github.com/spelech/ha-google-home-bt-proxy/blob/main/docs/authentication_guide.md).*",
         "data": {
           "username": "Google Account Email",
           "master_token": "OAuth Token or Master Token"
@@ -40,7 +38,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Google authentication servers.",
-      "invalid_auth": "Authentication failed. Use a 16-character App Password (myaccount.google.com/apppasswords). If Google blocks password login, log in at https://accounts.google.com/EmbeddedSetup, copy the 'oauth_token' cookie from DevTools (F12 > Storage/Application > Cookies), and paste it into Master Token."
+      "invalid_auth": "Authentication failed or token expired. Please ensure you copied the fresh 'oauth_token' cookie from https://accounts.google.com/EmbeddedSetup (starts with oauth2_4/...) after clicking 'I agree'."
     }
   },
   "options": {

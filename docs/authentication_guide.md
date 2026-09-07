@@ -9,8 +9,10 @@ This guide walks you through authenticating Google Home Bluetooth Proxy with you
 | Method | When to Use | Setup Time |
 | :--- | :--- | :--- |
 | **1. Existing `ha-google-home` Import** | You already run the [ha-google-home](https://github.com/leikoilja/ha-google-home) integration in HA | **Instant (1 Click)** |
-| **2. Google App Password** | Standard setup for personal Google accounts with 2-Step Verification | **~1 Minute** |
-| **3. Browser Token Copy** | If App Password fails with `BadAuthentication` or `NeedsBrowser` | **~30 Seconds** |
+| **2. Browser Token / Cookie Copy** | Standard setup for all Google accounts | **~30 Seconds** |
+
+> [!NOTE]
+> **Why no App Passwords?** Google has deprecated and blocked automated OAuth token generation (`gpsoauth`) via App Passwords on almost all modern accounts, returning `BadAuthentication`. Extracting a one-time browser cookie (`oauth2_4/...`) via `EmbeddedSetup` is 100% reliable, takes ~30 seconds, and avoids entering your Google account credentials into Home Assistant.
 
 ---
 
@@ -25,23 +27,9 @@ If you already use the popular `ha-google-home` custom component for alarms, tim
 
 ---
 
-## Method 2: Google App Password (Recommended)
+## Method 2: Browser DevTools Token Extraction
 
-1. Open [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
-   *(Note: You must have **2-Step Verification** turned on in your Google Account security settings to generate an App Password.)*
-2. Under **App name**, enter `Home Assistant BT Proxy` and click **Create**.
-3. Google displays a 16-character password (e.g. `abcd efgh ijkl mnop`).
-4. In Home Assistant:
-   - **Google Account Email**: Your full Google email address.
-   - **App Password**: The 16-character password (spaces can be omitted or included).
-   - **Master Token**: Leave blank.
-5. Click **Submit**.
-
----
-
-## Method 3: Browser DevTools Token Extraction
-
-If Google rejects password login (returning `BadAuthentication` or requiring browser verification), you can grab a one-time token from Google in about 30 seconds using your regular web browser. **No extensions or developer mode required.**
+Grab a one-time token from Google in about 30 seconds using your regular desktop web browser. **No extensions or developer mode required.**
 
 ### Step 1: Open Google Embedded Setup
 Open a desktop browser (Chrome, Edge, Brave, or Firefox) and navigate to:

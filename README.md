@@ -91,26 +91,22 @@ Restart Home Assistant.
 1. In Home Assistant, navigate to **Settings** > **Devices & Services** > **Add Integration**.
 2. Search for **Google Home Bluetooth Proxy**.
 3. Authenticate using your preferred method:
-   - **Existing Google Home Users (Automatic)**: If you already have the `google_home` integration configured, credentials are automatically detected and imported with 1 click.
-   - **App Password (Recommended)**: Enter your Google account email and a 16-character App Password generated at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
-   - **Master Token**: Enter your Google account email and Master Token (`aas_et/...` or `oauth2_4/...`). (Android ID is generated automatically in the background.)
+   - **Existing Google Home Users (Automatic 1-Click)**: If you already run the popular `ha-google-home` integration, your credentials and master token are automatically detected and imported with 1 click.
+   - **Browser Token / Cookie Copy (~30 Seconds)**: Enter your Google account email and paste the one-time `oauth_token` cookie value (`oauth2_4/...` or master token `aas_et/...`).
 4. The integration discovers supported speakers on your local network and sets up Bluetooth scanner proxies for them.
 
-### Authentication Troubleshooting
+### How to Retrieve Your Browser Token
 
-If Google rejects your login (`invalid_auth` or `BadAuthentication`):
+Google has blocked automated password authentication (`gpsoauth`) on almost all modern accounts. To safely retrieve your token directly from Google:
 
-1. **Verify 2-Step Verification**: Google requires 2FA to generate App Passwords at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords). Standard account passwords will not work.
-2. **If Google Blocks App Passwords (Browser Verification Required)**:
-   Some Google accounts or network environments trigger Google's automated security verification. You can easily obtain a token via your browser without installing any tools:
-   - In your desktop browser, open: `https://accounts.google.com/EmbeddedSetup`
-   - Sign in to your Google account and click **"I agree"** on the setup screen.
-   - Open Developer Tools (`F12` or `Ctrl+Shift+I` / `Cmd+Opt+I`).
-   - Go to **Application** (Chrome/Edge) or **Storage** (Firefox) > **Cookies** > `https://accounts.google.com`.
-   - Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`), then you can close the browser tab.
-   - In Home Assistant, enter your Google email and paste that token directly into the **Master Token** field. The integration will automatically exchange it for a permanent master token.
+1. In a desktop browser (Chrome, Edge, Brave, Firefox), open: `https://accounts.google.com/EmbeddedSetup`
+2. Sign into your Google account and click **"I agree"** on the setup screen.
+3. Open Developer Tools (`F12` or `Ctrl+Shift+I` / `Cmd+Opt+I`).
+4. Go to **Application** (Chrome/Edge/Brave) or **Storage** (Firefox) > **Cookies** > `https://accounts.google.com`.
+5. Copy the value of the cookie named **`oauth_token`** (starts with `oauth2_4/...`), then close the browser tab.
+6. In Home Assistant, paste that token directly into the **OAuth Token or Master Token** field (raw strings like `oauth_token:"oauth2_4/..."` are cleaned automatically).
 
-For a detailed step-by-step walkthrough with visual diagrams and screenshots, see the [Authentication Guide](docs/authentication_guide.md).
+For a detailed step-by-step walkthrough with visual screenshots, see the [Authentication Guide](docs/authentication_guide.md).
 
 ### Configuration Options
 

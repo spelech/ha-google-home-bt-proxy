@@ -49,6 +49,10 @@ async def test_config_flow_show_form():
     result = await flow.async_step_user(None)
     assert result["type"] == "form"
     assert result["step_id"] == "user"
+    schema_keys = [k.schema for k in result["data_schema"].schema.keys()]
+    assert CONF_USERNAME in schema_keys
+    assert CONF_MASTER_TOKEN in schema_keys
+    assert CONF_PASSWORD not in schema_keys
 
 
 @pytest.mark.asyncio
@@ -64,7 +68,7 @@ async def test_config_flow_invalid_auth():
     with patch.object(flow, "_validate_credentials", return_value=False):
         result = await flow.async_step_user(user_input)
         assert result["type"] == "form"
-        assert result["step_id"] == "token"
+        assert result["step_id"] == "user"
         assert result["errors"] == {"base": "invalid_auth"}
 
 
@@ -413,7 +417,7 @@ async def test_config_flow_oauth_token_exchange_failure():
     ):
         result = await flow.async_step_user(user_input)
         assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "token"
+        assert result["step_id"] == "user"
         assert result["errors"] == {"base": "invalid_auth"}
 
 
@@ -428,7 +432,7 @@ async def test_config_flow_oauth_token_missing_username():
     }
     result = await flow.async_step_user(user_input)
     assert result["type"] == FlowResultType.FORM
-    assert result["step_id"] == "token"
+    assert result["step_id"] == "user"
     assert result["errors"] == {"base": "invalid_auth"}
 
 
@@ -569,7 +573,7 @@ async def test_config_flow_step_token_failure_reshows_token_step():
     ):
         result = await flow.async_step_token(user_input)
         assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "token"
+        assert result["step_id"] == "user"
         assert result["errors"] == {"base": "invalid_auth"}
         # Verify schema only has username and master_token (no password)
         schema_keys = [k.schema for k in result["data_schema"].schema.keys()]
