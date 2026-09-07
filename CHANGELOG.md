@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-07
+
+### Added
+- **Bermuda BLE Optimization Mode (`bermuda_mode`)**:
+  - Automatically enabled when Bermuda BLE Trilateration is detected in Home Assistant, or manually toggleable via Global Options and per-speaker overrides.
+  - Forwards pure raw instantaneous RSSI directly to Home Assistant's Bluetooth manager (bypassing proxy rolling median/EMA smoothing) and resets proxy RSSI calibration offsets to $0\text{ dBm}$.
+  - Allows Bermuda's native asymmetric velocity-limiting filter to process true signal peaks and delegates distance calibration directly to Bermuda's scanner offset configuration.
+- **Peer Speaker Proxy Suppression (`filter_peer_proxies`)**:
+  - Automatically detects and filters out Bluetooth advertisement packets transmitted by peer Google Home / Nest speakers across the local network.
+  - Implements Bermuda-compatible $\pm 3$ MAC math offset suppression (`mac_math_offset`) to eliminate cross-proxy loops and phantom beacon tracking.
+- **Bermuda Diagnostic Telemetry**:
+  - Status sensors now expose diagnostic state attributes: `scanner_mac`, `wifi_mac`, `bermuda_compatible` (boolean), `bermuda_mode` (boolean), and `rssi_mode` (`"raw"` vs `"smoothed"`).
+- **Sub-10s Inquiry Scan Timing for Bermuda `AREA_MAX_AD_AGE`**:
+  - Updated default idle scan timeout to $4\text{s}$ and idle scan interval to $4\text{s}$ ($8\text{s}$ total inquiry cycle $\le 10.0\text{s}$). Ensures BLE advertisement packets never expire past Bermuda's area presence contest threshold.
+
 ## [1.0.6] - 2026-09-07
 
 ### Improved
