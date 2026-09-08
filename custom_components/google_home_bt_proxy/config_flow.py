@@ -348,14 +348,30 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                 choices[spk_id] = spk_id
         return choices
 
+    def _get_default_bermuda(self) -> bool:
+        """Check if Bermuda is loaded or configured."""
+        if not getattr(self, "hass", None):
+            return DEFAULT_BERMUDA_MODE
+        config = getattr(self.hass, "config", None)
+        components = getattr(config, "components", set()) if config else set()
+        is_bermuda = (
+            "bermuda" in components
+            or bool(
+                getattr(self.hass, "config_entries", None)
+                and self.hass.config_entries.async_entries("bermuda")
+            )
+        )
+        return is_bermuda or DEFAULT_BERMUDA_MODE
+
     def _is_bermuda_mode_active(self) -> bool:
         """Check whether Bermuda Mode is active in options or for the selected speaker."""
         options = self.config_entry.options
+        default_bermuda = self._get_default_bermuda()
         if hasattr(self, "_selected_speaker") and self._selected_speaker != GLOBAL_SETTINGS:
             spk_overrides = options.get(CONF_SPEAKER_OVERRIDES, {}).get(self._selected_speaker, {})
             if CONF_BERMUDA_MODE in spk_overrides:
                 return bool(spk_overrides[CONF_BERMUDA_MODE])
-        return bool(options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE))
+        return bool(options.get(CONF_BERMUDA_MODE, default_bermuda))
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options hub menu."""
@@ -381,11 +397,12 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_options)
 
         options = self.config_entry.options
+        default_bermuda = options.get(CONF_BERMUDA_MODE, self._get_default_bermuda())
         schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_BERMUDA_MODE,
-                    default=options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE),
+                    default=default_bermuda,
                 ): bool,
                 vol.Optional(
                     CONF_FILTER_PEER_PROXIES,
@@ -592,6 +609,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_options)
 
         has_custom = bool(existing_overrides)
+        default_bermuda = options.get(CONF_BERMUDA_MODE, self._get_default_bermuda())
         speaker_schema = vol.Schema(
             {
                 vol.Optional(
@@ -602,7 +620,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_BERMUDA_MODE,
                     default=existing_overrides.get(
                         CONF_BERMUDA_MODE,
-                        options.get(CONF_BERMUDA_MODE, DEFAULT_BERMUDA_MODE),
+                        default_bermuda,
                     ),
                 ): bool,
                 vol.Optional(

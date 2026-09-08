@@ -143,7 +143,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if alt := mac_math_offset(norm, offset):
                     all_speaker_macs.add(alt.upper())
 
-    is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+    is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set()) or bool(
+        getattr(hass, "config_entries", None) and hass.config_entries.async_entries("bermuda")
+    )
     default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
 
     for index, speaker in enumerate(active_speakers):
@@ -496,7 +498,9 @@ async def _speaker_scan_loop(
         speaker_rssi_offset = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
         )
-        is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+        is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set()) or bool(
+            getattr(hass, "config_entries", None) and hass.config_entries.async_entries("bermuda")
+        )
         default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
         speaker_bermuda_mode = bool(
             _get_speaker_setting(entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda)
