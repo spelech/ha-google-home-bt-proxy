@@ -181,3 +181,65 @@ async def test_coordinator_fetch_devices_executor_invoked():
         zeroconf_instance=None,
         force_homegraph_reload=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_coordinator_skips_non_speaker_cast_hardware():
+    """Verify coordinator skips non-speaker Cast devices such as Android TVs, Shield, Chromecasts, and receivers."""
+    mock_hass = MagicMock()
+    mock_hass.async_add_executor_job = AsyncMock()
+
+    spk_real = MagicMock(
+        device_id="spk-real",
+        device_name="Living Room Speaker",
+        ip_address="192.168.1.50",
+        local_auth_token="token-real",
+        hardware="Google Nest Mini",
+    )
+    dev_shield = MagicMock(
+        device_id="shield-1",
+        device_name="SHIELD",
+        ip_address="192.168.1.51",
+        local_auth_token="token-shield",
+        hardware="SHIELD Android TV",
+    )
+    dev_tv = MagicMock(
+        device_id="tv-1",
+        device_name="Family Room TV",
+        ip_address="192.168.1.52",
+        local_auth_token="token-tv",
+        hardware="Smart TV Pro",
+    )
+    dev_chromecast = MagicMock(
+        device_id="cc-1",
+        device_name="Gym TV",
+        ip_address="192.168.1.53",
+        local_auth_token="token-cc",
+        hardware="Chromecast Ultra",
+    )
+    dev_onkyo = MagicMock(
+        device_id="onkyo-1",
+        device_name="Onkyo Receiver",
+        ip_address="192.168.1.54",
+        local_auth_token="token-onkyo",
+        hardware="Onkyo TX-NR676",
+    )
+
+    mock_hass.async_add_executor_job.return_value = [
+        spk_real,
+        dev_shield,
+        dev_tv,
+        dev_chromecast,
+        dev_onkyo,
+    ]
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        master_token="test-master-token",
+    )
+
+    speakers = await coordinator.async_get_speakers()
+    assert len(speakers) == 1
+    assert speakers[0].device_id == "spk-real"
+    assert speakers[0].name == "Living Room Speaker"
+

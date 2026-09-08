@@ -193,7 +193,7 @@ async def test_speaker_scan_loop_normal_cycle():
     )
 
     # Let the loop perform one scan cycle
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.2)
     loop_task.cancel()
 
     with pytest.raises(asyncio.CancelledError):

@@ -8,11 +8,23 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
+def is_valid_mac(mac: str | None) -> bool:
+    """Return True if mac is a valid, non-dummy 48-bit MAC address."""
+    if not mac or not isinstance(mac, str):
+        return False
+    cleaned = mac.replace(":", "").replace("-", "").replace(".", "").strip().upper()
+    return (
+        len(cleaned) == 12
+        and all(c in "0123456789ABCDEF" for c in cleaned)
+        and cleaned not in ("000000000000", "FFFFFFFFFFFF")
+    )
+
+
 def format_or_derive_mac(device_id: str, raw_mac: str | None = None) -> str:
     """Return a normalized MAC address (XX:XX:XX:XX:XX:XX) or derive a deterministic unicast MAC."""
     target = raw_mac or device_id
-    cleaned = target.replace(":", "").replace("-", "").replace(".", "").strip().upper()
-    if len(cleaned) == 12 and all(c in "0123456789ABCDEF" for c in cleaned):
+    if target and is_valid_mac(target):
+        cleaned = target.replace(":", "").replace("-", "").replace(".", "").strip().upper()
         return ":".join(cleaned[i : i + 2] for i in range(0, 12, 2))
 
     # Hash device_id to get deterministic bytes

@@ -137,6 +137,17 @@ def test_eureka_mac_extraction():
         GoogleHomeApiClient._extract_mac({"wifi": {"wlan0_mac": "6C:AD:F8:11:22:77"}})
         == "6C:AD:F8:11:22:77"
     )
+    # hotspot_bssid fallback when mac_address is 00:00:00:00:00:00
+    assert (
+        GoogleHomeApiClient._extract_mac(
+            {"mac_address": "00:00:00:00:00:00", "hotspot_bssid": "FA:8F:CA:69:B6:3E"}
+        )
+        == "FA:8F:CA:69:B6:3E"
+    )
+    # Dummy MAC rejection
+    assert GoogleHomeApiClient._extract_mac({"mac_address": "00:00:00:00:00:00"}) is None
+    assert GoogleHomeApiClient._extract_mac({"mac_address": "FF:FF:FF:FF:FF:FF"}) is None
+
     # Empty / none
     assert GoogleHomeApiClient._extract_mac({}) is None
     assert GoogleHomeApiClient._extract_mac("not_a_dict") is None

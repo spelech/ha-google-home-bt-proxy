@@ -17,7 +17,7 @@ from .const import (
     HEADER_LOCAL_AUTH,
     PORT_HTTPS,
 )
-from .models import DiscoveredDevice, SpeakerNode, format_or_derive_mac
+from .models import DiscoveredDevice, SpeakerNode, format_or_derive_mac, is_valid_mac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +28,10 @@ class TokenExpiredError(Exception):
 
 class SpeakerConnectionError(Exception):
     """Raised on connection timeout or network failure."""
+
+
+class SpeakerUnsupportedError(Exception):
+    """Raised when the device returns HTTP 404 (Bluetooth scan API not implemented)."""
 
 
 class GoogleHomeApiClient:
@@ -48,7 +52,8 @@ class GoogleHomeApiClient:
 
     def _build_url(self, ip_address: str, endpoint: str) -> str:
         protocol = "https" if self._use_ssl else "http"
-        return f"{protocol}://{ip_address}:{self._port}/{endpoint}"
+        host = f"[{ip_address}]" if ":" in ip_address and not ip_address.startswith("[") else ip_address
+        return f"{protocol}://{host}:{self._port}/{endpoint}"
 
     def _headers(self, auth_token: str) -> dict[str, str]:
         return {
@@ -75,6 +80,11 @@ class GoogleHomeApiClient:
             ) as resp:
                 if resp.status == 401:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
+                if resp.status == 404:
+                    speaker.available = False
+                    raise SpeakerUnsupportedError(
+                        f"Bluetooth scan API not supported on {speaker.name} (HTTP 404)"
+                    )
                 if resp.status == 200:
                     speaker.available = True
                     return True
@@ -97,6 +107,11 @@ class GoogleHomeApiClient:
             ) as resp:
                 if resp.status == 401:
                     raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
+                if resp.status == 404:
+                    speaker.available = False
+                    raise SpeakerUnsupportedError(
+                        f"Bluetooth scan results API not supported on {speaker.name} (HTTP 404)"
+                    )
                 if resp.status == 200:
                     speaker.available = True
                     data = await resp.json()
@@ -167,24 +182,25 @@ class GoogleHomeApiClient:
 
     @staticmethod
     def _extract_mac(data: dict[str, Any]) -> str | None:
-        """Extract MAC address from eureka_info payload if present."""
+        """Extract valid MAC address from eureka_info payload if present."""
         if not isinstance(data, dict):
             return None
-        if mac := data.get("mac_address"):
-            return str(mac)
+        for key in ("mac_address", "hotspot_bssid"):
+            if (mac := data.get(key)) and is_valid_mac(str(mac)):
+                return str(mac)
         dev_info = data.get("device_info")
-        if isinstance(dev_info, dict) and (mac := dev_info.get("mac_address")):
+        if isinstance(dev_info, dict) and (mac := dev_info.get("mac_address")) and is_valid_mac(str(mac)):
             return str(mac)
         net_info = data.get("net")
         if isinstance(net_info, dict):
             wlan0 = net_info.get("wlan0")
-            if isinstance(wlan0, dict) and (mac := wlan0.get("mac")):
+            if isinstance(wlan0, dict) and (mac := wlan0.get("mac")) and is_valid_mac(str(mac)):
                 return str(mac)
             eth = net_info.get("ethernet")
-            if isinstance(eth, dict) and (mac := eth.get("mac")):
+            if isinstance(eth, dict) and (mac := eth.get("mac")) and is_valid_mac(str(mac)):
                 return str(mac)
         wifi_info = data.get("wifi")
-        if isinstance(wifi_info, dict) and (mac := wifi_info.get("wlan0_mac")):
+        if isinstance(wifi_info, dict) and (mac := wifi_info.get("wlan0_mac")) and is_valid_mac(str(mac)):
             return str(mac)
         return None
 

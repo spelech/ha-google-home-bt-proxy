@@ -9,6 +9,7 @@ from aiohttp import web
 from custom_components.google_home_bt_proxy.api import (
     GoogleHomeApiClient,
     SpeakerConnectionError,
+    SpeakerUnsupportedError,
     TokenExpiredError,
 )
 from custom_components.google_home_bt_proxy.models import SpeakerNode
@@ -292,3 +293,35 @@ async def test_get_bluetooth_status(aiohttp_client) -> None:
     assert "connected_devices" in status
     assert len(status["connected_devices"]) == 1
     assert status["connected_devices"][0]["name"] == "Phone"
+
+
+@pytest.mark.asyncio
+async def test_start_scan_and_get_results_unsupported_404(aiohttp_client) -> None:
+    """Verify start_scan and get_scan_results raise SpeakerUnsupportedError on HTTP 404."""
+
+    async def handle_404(request: web.Request) -> web.Response:
+        return web.Response(status=404)
+
+    app = web.Application()
+    app.router.add_post("/setup/bluetooth/scan", handle_404)
+    app.router.add_get("/setup/bluetooth/scan_results", handle_404)
+
+    client = await aiohttp_client(app)
+    api_client = GoogleHomeApiClient(client.session, port=client.server.port, use_ssl=False)
+
+    speaker = SpeakerNode(
+        device_id="test-spk",
+        name="Test Shield TV",
+        ip_address=str(client.server.host),
+        auth_token="test-token",
+    )
+
+    with pytest.raises(SpeakerUnsupportedError):
+        await api_client.start_scan(speaker)
+    assert speaker.available is False
+
+    speaker.available = True
+    with pytest.raises(SpeakerUnsupportedError):
+        await api_client.get_scan_results(speaker)
+    assert speaker.available is False
+
