@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-08
+
+### Added
+- **Startup Bermuda Auto-Detection (`_get_default_bermuda`)**:
+  - Automatically queries `hass.config_entries` for an active `bermuda` configuration entry during integration setup and options initialization.
+  - Automatically defaults `bermuda_mode` to `True` when Bermuda is installed, eliminating manual configuration steps.
+- **Hardware Keyword Exclusion Filtering**:
+  - Implemented `EXCLUDED_HARDWARE_KEYWORDS` in `coordinator.py` to cleanly ignore non-speaker Cast hardware (Android TVs, Nvidia SHIELD, Chromecasts, and audio/video receivers) during device discovery.
+- **Graceful Unsupported Scan Endpoint Handling (`SpeakerUnsupportedError`)**:
+  - Added dedicated exception handling in `GoogleHomeApiClient` and `_speaker_scan_loop` for Cast devices lacking the BLE scan endpoint, permanently preventing HTTP 404 scan warning spam.
+- **mDNS Zeroconf Dual-Stack IPv4 Resolution (`resolve_cast_ipv4_map`)**:
+  - Implemented Zeroconf mDNS discovery to automatically map Cast device IDs and friendly names to their IPv4 addresses, avoiding IPv6 link-local connection errors on dual-stack networks.
+
+### Fixed
+- **Dummy MAC Address Collision (`00:00:00:00:00:00`)**:
+  - Fixed `is_valid_mac` in `models.py` to reject dummy/broadcast MAC addresses (`00:00:00:00:00:00` and `FF:FF:FF:FF:FF:FF`).
+  - Updated `_extract_mac` in `api.py` to prioritize `hotspot_bssid` when the primary `mac_address` field contains dummy zeros, preventing entity collisions on Nest Minis.
+- **Home Assistant Deprecation Warnings**:
+  - Modernized device registry lookups with `async_get_device_by_identifier` and `async_get_device_by_connection` for Home Assistant 2026/2027 compatibility.
+  - Eliminated Zeroconf multi-instance deprecation warnings by sharing Home Assistant's managed Zeroconf instance.
+- **IPv6 URL Host Formatting**:
+  - Wrapped IPv6 addresses in brackets (`[fe80::...]`) to ensure compliance with RFC 3986 and prevent socket connection failures.
+
 ## [1.3.0] - 2026-09-07
 
 ### Added
