@@ -137,6 +137,17 @@ def test_eureka_mac_extraction():
         GoogleHomeApiClient._extract_mac({"wifi": {"wlan0_mac": "6C:AD:F8:11:22:77"}})
         == "6C:AD:F8:11:22:77"
     )
+    # hotspot_bssid fallback when mac_address is 00:00:00:00:00:00
+    assert (
+        GoogleHomeApiClient._extract_mac(
+            {"mac_address": "00:00:00:00:00:00", "hotspot_bssid": "FA:8F:CA:69:B6:3E"}
+        )
+        == "FA:8F:CA:69:B6:3E"
+    )
+    # Dummy MAC rejection
+    assert GoogleHomeApiClient._extract_mac({"mac_address": "00:00:00:00:00:00"}) is None
+    assert GoogleHomeApiClient._extract_mac({"mac_address": "FF:FF:FF:FF:FF:FF"}) is None
+
     # Empty / none
     assert GoogleHomeApiClient._extract_mac({}) is None
     assert GoogleHomeApiClient._extract_mac("not_a_dict") is None
@@ -779,3 +790,37 @@ async def test_speaker_scan_loop_dynamic_area_sync():
 
     # Verify bluetooth scanner device was updated with the new area
     mock_devreg.async_update_device.assert_called_with("bt_dev_id", area_id="master_bedroom")
+
+
+@pytest.mark.asyncio
+async def test_options_flow_bermuda_mode_default_with_config_entries():
+    """Verify Options Flow defaults Bermuda mode to True when Bermuda is in config_entries."""
+    from custom_components.google_home_bt_proxy.config_flow import (
+        GoogleHomeBtProxyOptionsFlowHandler,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-entry-bermuda-ce"
+    mock_entry.options = {}
+
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    mock_hass = MagicMock()
+    mock_hass.config.components = set()  # Bermuda NOT in components yet (e.g. startup)
+    mock_hass.config_entries.async_entries.side_effect = lambda domain: (
+        [MagicMock()] if domain == "bermuda" else []
+    )
+    handler.hass = mock_hass
+
+    assert handler._get_default_bermuda() is True
+    assert handler._is_bermuda_mode_active() is True
+
+    res = await handler.async_step_scanning(None)
+    assert res["type"] == "form"
+    # Verify default in schema is True
+    bermuda_field = None
+    for k in res["data_schema"].schema:
+        if k == CONF_BERMUDA_MODE:
+            bermuda_field = k
+            break
+    assert bermuda_field is not None
+    assert bermuda_field.default() is True

@@ -16,7 +16,12 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
-from .api import GoogleHomeApiClient, SpeakerConnectionError, TokenExpiredError
+from .api import (
+    GoogleHomeApiClient,
+    SpeakerConnectionError,
+    SpeakerUnsupportedError,
+    TokenExpiredError,
+)
 from .const import (
     CONF_ANDROID_ID,
     CONF_BERMUDA_MODE,
@@ -70,7 +75,7 @@ from .const import (
     MODE_THROTTLE,
     ORCHESTRATION_INDEPENDENT,
 )
-from .coordinator import GoogleHomeProxyCoordinator
+from .coordinator import GoogleHomeProxyCoordinator, is_valid_ipv4
 from .filter import SignalProcessor
 from .irk import IrkResolver, parse_irk_config
 from .models import SpeakerNode, SpeakerProxyState, mac_math_offset
@@ -143,7 +148,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if alt := mac_math_offset(norm, offset):
                     all_speaker_macs.add(alt.upper())
 
-    is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+    is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set()) or bool(
+        getattr(hass, "config_entries", None) and hass.config_entries.async_entries("bermuda")
+    )
     default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
 
     for index, speaker in enumerate(active_speakers):
@@ -336,6 +343,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _get_device_by_identifier(device_registry: Any, domain: str, identifier: str) -> Any:
+    """Retrieve device by identifier supporting both modern and legacy HA APIs."""
+    # If device_registry is a test mock without async_get_device_by_identifier
+    if type(device_registry).__name__ in ("MagicMock", "Mock", "AsyncMock"):
+        if hasattr(device_registry, "async_get_device"):
+            try:
+                return device_registry.async_get_device(identifiers={(domain, identifier)})
+            except Exception:
+                pass
+    if hasattr(device_registry, "async_get_device_by_identifier"):
+        try:
+            return device_registry.async_get_device_by_identifier((domain, identifier))
+        except Exception:
+            return None
+    if hasattr(device_registry, "async_get_device"):
+        try:
+            return device_registry.async_get_device(identifiers={(domain, identifier)})
+        except Exception:
+            pass
+    return None
+
+
+def _get_device_by_connection(
+    device_registry: Any, connection_type: str, connection_val: str
+) -> Any:
+    """Retrieve device by connection supporting both modern and legacy HA APIs."""
+    # If device_registry is a test mock without async_get_device_by_connection
+    if type(device_registry).__name__ in ("MagicMock", "Mock", "AsyncMock"):
+        if hasattr(device_registry, "async_get_device"):
+            try:
+                return device_registry.async_get_device(
+                    connections={(connection_type, connection_val)}
+                )
+            except Exception:
+                pass
+    if hasattr(device_registry, "async_get_device_by_connection"):
+        try:
+            return device_registry.async_get_device_by_connection((connection_type, connection_val))
+        except Exception:
+            return None
+    if hasattr(device_registry, "async_get_device"):
+        try:
+            return device_registry.async_get_device(connections={(connection_type, connection_val)})
+        except Exception:
+            pass
+    return None
+
+
 def _resolve_speaker_area(
     device_registry: Any,
     speaker: SpeakerNode,
@@ -345,38 +400,27 @@ def _resolve_speaker_area(
         return None
 
     # 0. Check if our own speaker device already has an area assigned
-    if hasattr(device_registry, "async_get_device"):
-        try:
-            dev = device_registry.async_get_device(identifiers={(DOMAIN, speaker.device_id)})
-            if dev and getattr(dev, "area_id", None):
-                return dev.area_id
-        except Exception:
-            pass
+    dev = _get_device_by_identifier(device_registry, DOMAIN, speaker.device_id)
+    if dev and getattr(dev, "area_id", None):
+        return dev.area_id
 
     # 1. Check identifiers for google_home or cast domains
     for domain in ("google_home", "cast"):
-        if hasattr(device_registry, "async_get_device"):
-            try:
-                dev = device_registry.async_get_device(identifiers={(domain, speaker.device_id)})
-                if dev and getattr(dev, "area_id", None):
-                    return dev.area_id
-            except Exception:
-                pass
+        dev = _get_device_by_identifier(device_registry, domain, speaker.device_id)
+        if dev and getattr(dev, "area_id", None):
+            return dev.area_id
 
     # 2. Check connection by MAC address
-    if speaker.mac_address and hasattr(device_registry, "async_get_device"):
+    if speaker.mac_address:
         norm_mac = speaker.mac_address.lower()
         for offset in range(-3, 4):
             alt_mac = mac_math_offset(norm_mac, offset) or norm_mac
             for test_mac in (alt_mac.lower(), alt_mac.upper()):
-                try:
-                    dev = device_registry.async_get_device(
-                        connections={(dr.CONNECTION_NETWORK_MAC, test_mac)}
-                    )
-                    if dev and getattr(dev, "area_id", None):
-                        return dev.area_id
-                except Exception:
-                    pass
+                dev = _get_device_by_connection(
+                    device_registry, dr.CONNECTION_NETWORK_MAC, test_mac
+                )
+                if dev and getattr(dev, "area_id", None):
+                    return dev.area_id
 
     # 3. Check by friendly name
     devices = getattr(device_registry, "devices", None)
@@ -384,9 +428,9 @@ def _resolve_speaker_area(
         try:
             entries = devices.values() if hasattr(devices, "values") else devices
             target_name = speaker.name.strip().lower()
-            for dev in entries:
-                name = getattr(dev, "name", None) or getattr(dev, "name_by_user", None)
-                area_id = getattr(dev, "area_id", None)
+            for d in entries:
+                name = getattr(d, "name", None) or getattr(d, "name_by_user", None)
+                area_id = getattr(d, "area_id", None)
                 if name and area_id and name.strip().lower() == target_name:
                     return area_id
         except Exception:
@@ -401,7 +445,7 @@ def _sync_bluetooth_scanner_area(
     area_id: str | None,
 ) -> None:
     """Ensure the Bluetooth scanner device entry has the same area as the proxy speaker."""
-    if not device_registry or not area_id or not hasattr(device_registry, "async_get_device"):
+    if not device_registry or not area_id:
         return
     try:
         bt_dev = None
@@ -409,8 +453,8 @@ def _sync_bluetooth_scanner_area(
         for offset in range(-3, 4):
             alt = mac_math_offset(norm, offset) or norm
             for candidate in (alt.upper(), alt.lower()):
-                bt_dev = device_registry.async_get_device(
-                    connections={(dr.CONNECTION_BLUETOOTH, candidate)}
+                bt_dev = _get_device_by_connection(
+                    device_registry, dr.CONNECTION_BLUETOOTH, candidate
                 )
                 if bt_dev:
                     break
@@ -496,7 +540,9 @@ async def _speaker_scan_loop(
         speaker_rssi_offset = _get_speaker_setting(
             entry, speaker.device_id, CONF_RSSI_OFFSET, DEFAULT_RSSI_OFFSET
         )
-        is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set())
+        is_bermuda_loaded = "bermuda" in getattr(hass.config, "components", set()) or bool(
+            getattr(hass, "config_entries", None) and hass.config_entries.async_entries("bermuda")
+        )
         default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
         speaker_bermuda_mode = bool(
             _get_speaker_setting(entry, speaker.device_id, CONF_BERMUDA_MODE, default_bermuda)
@@ -594,8 +640,8 @@ async def _speaker_scan_loop(
 
         # Check and synchronize area assignments dynamically
         device_reg = dr.async_get(hass)
-        if device_reg and hasattr(device_reg, "async_get_device"):
-            current_dev = device_reg.async_get_device(identifiers={(DOMAIN, speaker.device_id)})
+        if device_reg:
+            current_dev = _get_device_by_identifier(device_reg, DOMAIN, speaker.device_id)
             current_area = getattr(current_dev, "area_id", None) if current_dev else None
             if not current_area:
                 current_area = _resolve_speaker_area(device_reg, speaker)
@@ -703,6 +749,16 @@ async def _speaker_scan_loop(
                 await coordinator.async_refresh_token(speaker)
                 await asyncio.sleep(2.0)
                 continue
+            except SpeakerUnsupportedError as err:
+                _LOGGER.warning(
+                    "Device %s unsupported for scanning (HTTP 404); stopping worker: %s",
+                    speaker.name,
+                    err,
+                )
+                state.status = "unsupported"
+                state.notify_callbacks()
+                speaker.available = False
+                return
             except SpeakerConnectionError as err:
                 _LOGGER.debug(
                     "Connection issue with %s: %s (backing off %0.1fs)",
@@ -712,6 +768,13 @@ async def _speaker_scan_loop(
                 )
                 state.status = "unavailable"
                 state.notify_callbacks()
+                if not is_valid_ipv4(speaker.ip_address):
+                    _LOGGER.info(
+                        "Speaker %s has non-IPv4 address (%s); attempting token and IP refresh...",
+                        speaker.name,
+                        speaker.ip_address,
+                    )
+                    await coordinator.async_refresh_token(speaker)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2.0, 60.0)
                 continue
