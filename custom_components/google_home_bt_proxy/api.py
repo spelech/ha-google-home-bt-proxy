@@ -52,7 +52,11 @@ class GoogleHomeApiClient:
 
     def _build_url(self, ip_address: str, endpoint: str) -> str:
         protocol = "https" if self._use_ssl else "http"
-        host = f"[{ip_address}]" if ":" in ip_address and not ip_address.startswith("[") else ip_address
+        host = (
+            f"[{ip_address}]"
+            if ":" in ip_address and not ip_address.startswith("[")
+            else ip_address
+        )
         return f"{protocol}://{host}:{self._port}/{endpoint}"
 
     def _headers(self, auth_token: str) -> dict[str, str]:
@@ -189,7 +193,11 @@ class GoogleHomeApiClient:
             if (mac := data.get(key)) and is_valid_mac(str(mac)):
                 return str(mac)
         dev_info = data.get("device_info")
-        if isinstance(dev_info, dict) and (mac := dev_info.get("mac_address")) and is_valid_mac(str(mac)):
+        if (
+            isinstance(dev_info, dict)
+            and (mac := dev_info.get("mac_address"))
+            and is_valid_mac(str(mac))
+        ):
             return str(mac)
         net_info = data.get("net")
         if isinstance(net_info, dict):
@@ -200,7 +208,11 @@ class GoogleHomeApiClient:
             if isinstance(eth, dict) and (mac := eth.get("mac")) and is_valid_mac(str(mac)):
                 return str(mac)
         wifi_info = data.get("wifi")
-        if isinstance(wifi_info, dict) and (mac := wifi_info.get("wlan0_mac")) and is_valid_mac(str(mac)):
+        if (
+            isinstance(wifi_info, dict)
+            and (mac := wifi_info.get("wlan0_mac"))
+            and is_valid_mac(str(mac))
+        ):
             return str(mac)
         return None
 

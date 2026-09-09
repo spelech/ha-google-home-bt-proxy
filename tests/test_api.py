@@ -324,4 +324,3 @@ async def test_start_scan_and_get_results_unsupported_404(aiohttp_client) -> Non
     with pytest.raises(SpeakerUnsupportedError):
         await api_client.get_scan_results(speaker)
     assert speaker.available is False
-

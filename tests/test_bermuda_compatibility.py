@@ -806,7 +806,9 @@ async def test_options_flow_bermuda_mode_default_with_config_entries():
     handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
     mock_hass = MagicMock()
     mock_hass.config.components = set()  # Bermuda NOT in components yet (e.g. startup)
-    mock_hass.config_entries.async_entries.side_effect = lambda domain: [MagicMock()] if domain == "bermuda" else []
+    mock_hass.config_entries.async_entries.side_effect = lambda domain: (
+        [MagicMock()] if domain == "bermuda" else []
+    )
     handler.hass = mock_hass
 
     assert handler._get_default_bermuda() is True
@@ -822,4 +824,3 @@ async def test_options_flow_bermuda_mode_default_with_config_entries():
             break
     assert bermuda_field is not None
     assert bermuda_field.default() is True
-

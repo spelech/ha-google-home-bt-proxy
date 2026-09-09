@@ -354,12 +354,9 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
             return DEFAULT_BERMUDA_MODE
         config = getattr(self.hass, "config", None)
         components = getattr(config, "components", set()) if config else set()
-        is_bermuda = (
-            "bermuda" in components
-            or bool(
-                getattr(self.hass, "config_entries", None)
-                and self.hass.config_entries.async_entries("bermuda")
-            )
+        is_bermuda = "bermuda" in components or bool(
+            getattr(self.hass, "config_entries", None)
+            and self.hass.config_entries.async_entries("bermuda")
         )
         return is_bermuda or DEFAULT_BERMUDA_MODE
 

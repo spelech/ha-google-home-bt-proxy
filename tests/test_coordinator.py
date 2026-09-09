@@ -185,7 +185,7 @@ async def test_coordinator_fetch_devices_executor_invoked():
 
 @pytest.mark.asyncio
 async def test_coordinator_skips_non_speaker_cast_hardware():
-    """Verify coordinator skips non-speaker Cast devices such as Android TVs, Shield, Chromecasts, and receivers."""
+    """Verify coordinator skips non-speaker Cast hardware (TVs, Shield, AVRs)."""
     mock_hass = MagicMock()
     mock_hass.async_add_executor_job = AsyncMock()
 
@@ -242,4 +242,3 @@ async def test_coordinator_skips_non_speaker_cast_hardware():
     assert len(speakers) == 1
     assert speakers[0].device_id == "spk-real"
     assert speakers[0].name == "Living Room Speaker"
-

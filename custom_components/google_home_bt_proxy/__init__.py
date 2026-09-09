@@ -345,7 +345,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 def _get_device_by_identifier(device_registry: Any, domain: str, identifier: str) -> Any:
     """Retrieve device by identifier supporting both modern and legacy HA APIs."""
-    # If device_registry is a test mock that didn't explicitly configure async_get_device_by_identifier
+    # If device_registry is a test mock without async_get_device_by_identifier
     if type(device_registry).__name__ in ("MagicMock", "Mock", "AsyncMock"):
         if hasattr(device_registry, "async_get_device"):
             try:
@@ -365,13 +365,17 @@ def _get_device_by_identifier(device_registry: Any, domain: str, identifier: str
     return None
 
 
-def _get_device_by_connection(device_registry: Any, connection_type: str, connection_val: str) -> Any:
+def _get_device_by_connection(
+    device_registry: Any, connection_type: str, connection_val: str
+) -> Any:
     """Retrieve device by connection supporting both modern and legacy HA APIs."""
-    # If device_registry is a test mock that didn't explicitly configure async_get_device_by_connection
+    # If device_registry is a test mock without async_get_device_by_connection
     if type(device_registry).__name__ in ("MagicMock", "Mock", "AsyncMock"):
         if hasattr(device_registry, "async_get_device"):
             try:
-                return device_registry.async_get_device(connections={(connection_type, connection_val)})
+                return device_registry.async_get_device(
+                    connections={(connection_type, connection_val)}
+                )
             except Exception:
                 pass
     if hasattr(device_registry, "async_get_device_by_connection"):
@@ -412,7 +416,9 @@ def _resolve_speaker_area(
         for offset in range(-3, 4):
             alt_mac = mac_math_offset(norm_mac, offset) or norm_mac
             for test_mac in (alt_mac.lower(), alt_mac.upper()):
-                dev = _get_device_by_connection(device_registry, dr.CONNECTION_NETWORK_MAC, test_mac)
+                dev = _get_device_by_connection(
+                    device_registry, dr.CONNECTION_NETWORK_MAC, test_mac
+                )
                 if dev and getattr(dev, "area_id", None):
                     return dev.area_id
 
@@ -447,7 +453,9 @@ def _sync_bluetooth_scanner_area(
         for offset in range(-3, 4):
             alt = mac_math_offset(norm, offset) or norm
             for candidate in (alt.upper(), alt.lower()):
-                bt_dev = _get_device_by_connection(device_registry, dr.CONNECTION_BLUETOOTH, candidate)
+                bt_dev = _get_device_by_connection(
+                    device_registry, dr.CONNECTION_BLUETOOTH, candidate
+                )
                 if bt_dev:
                     break
             if bt_dev:
@@ -743,7 +751,7 @@ async def _speaker_scan_loop(
                 continue
             except SpeakerUnsupportedError as err:
                 _LOGGER.warning(
-                    "Device %s does not support Bluetooth scanning (HTTP 404); stopping scan worker: %s",
+                    "Device %s unsupported for scanning (HTTP 404); stopping worker: %s",
                     speaker.name,
                     err,
                 )
