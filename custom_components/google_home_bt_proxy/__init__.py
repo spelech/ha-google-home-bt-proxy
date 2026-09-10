@@ -85,6 +85,8 @@ from .scanner import GoogleHomeRemoteScanner
 
 _LOGGER = logging.getLogger(__name__)
 
+MAX_CONSECUTIVE_UNSUPPORTED = 5
+
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SWITCH,
@@ -426,8 +428,8 @@ def _resolve_speaker_area(
     devices = getattr(device_registry, "devices", None)
     if devices is not None:
         try:
-            entries = devices.values() if hasattr(devices, "values") else devices
             target_name = speaker.name.strip().lower()
+            entries = devices.values() if isinstance(devices, dict) else devices
             for d in entries:
                 name = getattr(d, "name", None) or getattr(d, "name_by_user", None)
                 area_id = getattr(d, "area_id", None)
@@ -505,6 +507,7 @@ async def _speaker_scan_loop(
     _LOGGER.info("Starting Bluetooth scan worker loop for %s", speaker.name)
 
     backoff = 1.0
+    consecutive_unsupported = 0
     continuous_skip_start: float | None = None
     while True:
         if not state.enabled:
@@ -743,6 +746,7 @@ async def _speaker_scan_loop(
                 state.last_scan_timestamp = time.time()
                 state.status = "idle"
                 state.notify_callbacks()
+                consecutive_unsupported = 0
 
             except TokenExpiredError:
                 _LOGGER.warning("Auth token expired for %s, requesting refresh...", speaker.name)
@@ -750,15 +754,57 @@ async def _speaker_scan_loop(
                 await asyncio.sleep(2.0)
                 continue
             except SpeakerUnsupportedError as err:
+                consecutive_unsupported += 1
+                if (
+                    state.total_advertisements > 0
+                    or consecutive_unsupported < MAX_CONSECUTIVE_UNSUPPORTED
+                ):
+                    _LOGGER.warning(
+                        "Device %s returned HTTP 404 during scan (%d/%d); "
+                        "retrying with backoff %0.1fs: %s",
+                        speaker.name,
+                        consecutive_unsupported,
+                        MAX_CONSECUTIVE_UNSUPPORTED,
+                        backoff,
+                        err,
+                    )
+                    state.status = "unavailable"
+                    state.notify_callbacks()
+                    speaker.available = False
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2.0, 60.0)
+                    continue
+
                 _LOGGER.warning(
-                    "Device %s unsupported for scanning (HTTP 404); stopping worker: %s",
+                    "Device %s unsupported for scanning (HTTP 404 after %d consecutive attempts); "
+                    "pausing worker: %s",
                     speaker.name,
+                    consecutive_unsupported,
                     err,
                 )
                 state.status = "unsupported"
                 state.notify_callbacks()
                 speaker.available = False
-                return
+
+                try:
+                    await asyncio.wait_for(state.trigger_scan_event.wait(), timeout=1800.0)
+                except TimeoutError:
+                    pass
+
+                state.trigger_scan_event.clear()
+                consecutive_unsupported = 0
+                backoff = 1.0
+                speaker.available = True
+                _LOGGER.info("Attempting to revive scan worker for %s...", speaker.name)
+                try:
+                    await coordinator.async_refresh_token(speaker)
+                except Exception as refresh_err:
+                    _LOGGER.debug(
+                        "Error refreshing token on revival for %s: %s",
+                        speaker.name,
+                        refresh_err,
+                    )
+                continue
             except SpeakerConnectionError as err:
                 _LOGGER.debug(
                     "Connection issue with %s: %s (backing off %0.1fs)",

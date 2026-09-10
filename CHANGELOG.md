@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-09-09
+
+### Added
+- **UI Speaker Revival (`Revive Speaker` Button & Scan Button Enhancement)**:
+  - Added dedicated `button.<speaker>_revive` ("Revive Speaker") entity to instantly reconnect, refresh auth token and IP, clear unsupported/unavailable states, and restart the scan worker from the Home Assistant UI.
+  - Enhanced existing `button.<speaker>_trigger_scan` ("Trigger Bluetooth Scan") to automatically revive an unsupported or unavailable speaker upon being pressed.
+- **Resilient 404 Recovery & Transient Error Tolerance**:
+  - Previously active speakers (`total_advertisements > 0`) are never permanently marked as unsupported on HTTP 404; errors during reboots or socket drops are treated as temporary connectivity glitches with exponential backoff.
+  - New speakers require 5 consecutive HTTP 404 failures before the worker pauses, preventing false-positive terminations during speaker bootup.
+  - Paused workers wait on UI revival event (`trigger_scan_event`) or periodic 30-minute retry without exiting the background task.
+
+### Fixed
+- **Duplicate Zeroconf Instance Deprecation Warning**:
+  - Reused Home Assistant's managed Zeroconf instance directly in `resolve_cast_ipv4_map` without instantiating a duplicate `Zeroconf()`, utilizing Home Assistant's warm mDNS cache and silencing the warning.
+- **Device Registry `.devices` Mapping Deprecation Warning**:
+  - Directly iterated `device_registry.devices` in `_resolve_speaker_area` without calling `.values()`, ensuring forward compatibility with Home Assistant 2027.9.0.
+
 ## [1.4.0] - 2026-09-08
 
 ### Added

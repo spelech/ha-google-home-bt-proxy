@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.google_home_bt_proxy import (
+    _resolve_speaker_area,
     _speaker_scan_loop,
     async_setup,
     async_setup_entry,
@@ -13,6 +14,7 @@ from custom_components.google_home_bt_proxy import (
 )
 from custom_components.google_home_bt_proxy.api import (
     SpeakerConnectionError,
+    SpeakerUnsupportedError,
     TokenExpiredError,
 )
 from custom_components.google_home_bt_proxy.const import (
@@ -699,3 +701,149 @@ async def test_async_reload_entry():
         await async_reload_entry(mock_hass, mock_entry)
         mock_unload.assert_called_once_with(mock_hass, mock_entry)
         mock_setup.assert_called_once_with(mock_hass, mock_entry)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_unsupported_error_recovers_active_speaker():
+    """Verify an active speaker (total_advertisements > 0) treats 404 as transient."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(
+        side_effect=[
+            SpeakerUnsupportedError("HTTP 404"),
+            True,
+            asyncio.CancelledError(),
+        ]
+    )
+    mock_api.get_scan_results = AsyncMock(return_value=[DiscoveredDevice("AA:BB:CC:DD:EE:FF", -60)])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-active",
+        name="Basement speaker",
+        ip_address="10.0.0.112",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=1)
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    state = SpeakerProxyState(enabled=True)
+    state.total_advertisements = 10  # previously active
+
+    with patch("asyncio.sleep", AsyncMock()):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    assert mock_api.start_scan.call_count == 3
+    assert state.status != "unsupported"
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_unsupported_error_pauses_and_revives():
+    """Verify repeated 404s pause the worker and UI revival event restarts scanning."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+
+    mock_coord = MagicMock()
+    mock_coord.async_refresh_token = AsyncMock()
+
+    mock_api = MagicMock()
+    # 5 unsupported errors, then pause, then user triggers revival, then 1 success, then cancel
+    mock_api.start_scan = AsyncMock(
+        side_effect=[
+            SpeakerUnsupportedError("HTTP 404"),
+            SpeakerUnsupportedError("HTTP 404"),
+            SpeakerUnsupportedError("HTTP 404"),
+            SpeakerUnsupportedError("HTTP 404"),
+            SpeakerUnsupportedError("HTTP 404"),
+            True,
+            asyncio.CancelledError(),
+        ]
+    )
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-new",
+        name="New Speaker",
+        ip_address="10.0.0.120",
+        auth_token="test-token",
+    )
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=0)
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    state = SpeakerProxyState(enabled=True)
+
+    # When wait_for is called on the event, simulate UI button setting trigger_scan_event
+    async def mock_wait_for(fut, timeout=None):  # noqa: ASYNC109
+        state.trigger_scan_event.set()
+        return await fut
+
+    with (
+        patch("asyncio.sleep", AsyncMock()),
+        patch("asyncio.wait_for", side_effect=mock_wait_for),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    mock_coord.async_refresh_token.assert_awaited_once_with(mock_speaker)
+    assert mock_speaker.available is True
+
+
+def test_resolve_speaker_area_devices_direct_iterable():
+    """Verify _resolve_speaker_area directly iterates device_registry.devices without .values()."""
+    mock_dr = MagicMock(spec=[])
+    mock_dev = MagicMock()
+    mock_dev.name = "Living Room Speaker"
+    mock_dev.name_by_user = None
+    mock_dev.area_id = "living_room_area"
+
+    class MockDevicesIterable:
+        """Iterable collection that has no .values() method."""
+
+        def __iter__(self):
+            return iter([mock_dev])
+
+    mock_dr.devices = MockDevicesIterable()
+
+    speaker = SpeakerNode(
+        device_id="spk-test",
+        name="Living Room Speaker",
+        ip_address="10.0.0.50",
+        auth_token="token",
+        mac_address=None,
+    )
+
+    area = _resolve_speaker_area(mock_dr, speaker)
+    assert area == "living_room_area"
