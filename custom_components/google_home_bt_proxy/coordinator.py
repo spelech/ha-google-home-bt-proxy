@@ -75,7 +75,7 @@ def resolve_cast_ipv4_map(
     should_close = False
     try:
         zc_raw = zc
-        if zc_raw is None or type(zc_raw).__name__ == "HaZeroconf":
+        if zc_raw is None:
             zc_raw = Zeroconf()
             should_close = True
         browser = ServiceBrowser(zc_raw, "_googlecast._tcp.local.", _CastIPv4Listener())

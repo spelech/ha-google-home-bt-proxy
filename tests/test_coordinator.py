@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.google_home_bt_proxy.coordinator import GoogleHomeProxyCoordinator
+from custom_components.google_home_bt_proxy.coordinator import (
+    GoogleHomeProxyCoordinator,
+    resolve_cast_ipv4_map,
+)
 from custom_components.google_home_bt_proxy.models import SpeakerNode
 
 
@@ -242,3 +245,52 @@ async def test_coordinator_skips_non_speaker_cast_hardware():
     assert len(speakers) == 1
     assert speakers[0].device_id == "spk-real"
     assert speakers[0].name == "Living Room Speaker"
+
+
+def test_resolve_cast_ipv4_map_reuses_hazeroconf():
+    """Verify resolve_cast_ipv4_map reuses HA zeroconf without instantiating a new Zeroconf."""
+    mock_ha_zc = MagicMock()
+    type(mock_ha_zc).__name__ = "HaZeroconf"
+    mock_ha_zc.close = MagicMock()
+
+    from unittest.mock import patch
+
+    with (
+        patch("custom_components.google_home_bt_proxy.coordinator.ServiceBrowser") as mock_browser,
+        patch("custom_components.google_home_bt_proxy.coordinator.Zeroconf") as mock_new_zc,
+        patch("time.sleep"),
+    ):
+        mock_browser_inst = MagicMock()
+        mock_browser.return_value = mock_browser_inst
+
+        ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(mock_ha_zc, timeout=0.01)
+
+        # Should NOT instantiate a new Zeroconf
+        mock_new_zc.assert_not_called()
+        # Should NOT close the shared HaZeroconf
+        mock_ha_zc.close.assert_not_called()
+        # Should create browser with the shared instance
+        mock_browser.assert_called_once()
+        assert mock_browser.call_args[0][0] == mock_ha_zc
+        mock_browser_inst.cancel.assert_called_once()
+
+
+def test_resolve_cast_ipv4_map_fallback_when_none():
+    """Verify resolve_cast_ipv4_map creates and closes standalone Zeroconf when zc is None."""
+    from unittest.mock import patch
+
+    with (
+        patch("custom_components.google_home_bt_proxy.coordinator.ServiceBrowser") as mock_browser,
+        patch("custom_components.google_home_bt_proxy.coordinator.Zeroconf") as mock_new_zc,
+        patch("time.sleep"),
+    ):
+        mock_zc_inst = MagicMock()
+        mock_new_zc.return_value = mock_zc_inst
+        mock_browser_inst = MagicMock()
+        mock_browser.return_value = mock_browser_inst
+
+        ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(None, timeout=0.01)
+
+        mock_new_zc.assert_called_once()
+        mock_zc_inst.close.assert_called_once()
+        mock_browser_inst.cancel.assert_called_once()
