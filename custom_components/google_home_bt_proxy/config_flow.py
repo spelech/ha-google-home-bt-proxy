@@ -102,16 +102,6 @@ def clean_string(val: Any) -> str:
     return cleaned.strip()
 
 
-def clean_password(pwd: Any) -> str:
-    """Clean password input, removing spaces if matching Google App Password format."""
-    cleaned = clean_string(pwd)
-    # If user copied a 16-character Google App Password with standard 4-char chunk spacing
-    # (e.g. 'abcd efgh ijkl mnop')
-    if re.match(r"^([a-zA-Z0-9]{4}\s+){3}[a-zA-Z0-9]{4}$", cleaned):
-        cleaned = re.sub(r"\s+", "", cleaned)
-    return cleaned
-
-
 def sanitize_token(token: str) -> str:
     """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
     if not token or not isinstance(token, str):
@@ -147,16 +137,12 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Verify the provided credentials or master token."""
         for key in (
             CONF_USERNAME,
-            CONF_PASSWORD,
             CONF_MASTER_TOKEN,
             CONF_OAUTH_TOKEN,
             CONF_ANDROID_ID,
         ):
             if key in user_input and isinstance(user_input[key], str):
                 user_input[key] = clean_string(user_input[key])
-
-        if CONF_PASSWORD in user_input and isinstance(user_input[CONF_PASSWORD], str):
-            user_input[CONF_PASSWORD] = clean_password(user_input[CONF_PASSWORD])
 
         from glocaltokens.client import get_android_id  # type: ignore[attr-defined]
 
@@ -166,7 +152,6 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         master_token = sanitize_token(user_input.get(CONF_MASTER_TOKEN, ""))
         oauth_token = sanitize_token(user_input.get(CONF_OAUTH_TOKEN, ""))
         username = clean_string(user_input.get(CONF_USERNAME, ""))
-        password = clean_password(user_input.get(CONF_PASSWORD, ""))
 
         # Auto-detect if user entered an oauth token into master_token field
         if master_token.startswith("oauth2_4/"):
@@ -197,20 +182,6 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             user_input[CONF_MASTER_TOKEN] = master_token
             return True
 
-        if username and password:
-            client = GLocalAuthenticationTokens(
-                username=username,
-                password=password,
-                master_token=None,
-                android_id=android_id,
-            )
-            token = await self.hass.async_add_executor_job(client.get_master_token)
-            if token:
-                user_input[CONF_MASTER_TOKEN] = token
-                user_input.pop(CONF_PASSWORD, None)
-                return True
-            return False
-
         return False
 
     def _show_config_form(self, errors: dict[str, str] | None = None) -> ConfigFlowResult:
@@ -232,6 +203,7 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input.pop(CONF_PASSWORD, None)
             self._email = clean_string(user_input.get(CONF_USERNAME, ""))
             try:
                 valid = await self._validate_credentials(user_input)

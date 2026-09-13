@@ -294,3 +294,21 @@ def test_resolve_cast_ipv4_map_fallback_when_none():
         mock_new_zc.assert_called_once()
         mock_zc_inst.close.assert_called_once()
         mock_browser_inst.cancel.assert_called_once()
+
+
+def test_coordinator_initializes_glocaltokens_with_empty_password_and_master_token():
+    """Verify coordinator passes empty password to glocaltokens to bypass upstream check."""
+    mock_hass = MagicMock()
+    token = "aas_et/test_valid_master_token_format_1234567890"
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        username="test@example.com",
+        master_token=token,
+        android_id="android_id_123",
+    )
+
+    assert coordinator._client.username == "test@example.com"
+    assert coordinator._client.password == ""
+    assert coordinator._client.master_token == token
+    # Verify glocaltokens get_master_token returns master_token without missing password error
+    assert coordinator._client.get_master_token() == token

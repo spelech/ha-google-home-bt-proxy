@@ -101,38 +101,37 @@ async def test_validate_credentials_with_master_token():
 
 
 @pytest.mark.asyncio
-async def test_validate_credentials_with_credentials_success():
+async def test_validate_credentials_rejects_password_only_without_token():
+    """Verify that supplying only username and password without a master or oauth token fails."""
+    hass = MagicMock()
     flow = GoogleHomeBtProxyConfigFlow()
-    mock_hass = MagicMock()
-    mock_hass.async_add_executor_job = AsyncMock(return_value="obtained-master-token")
-    flow.hass = mock_hass
+    flow.hass = hass
 
     user_input = {
         CONF_USERNAME: "user@example.com",
-        CONF_PASSWORD: "secret-password",
-        CONF_ANDROID_ID: "aid",
+        CONF_PASSWORD: "secret_password",
     }
-    patch_path = "custom_components.google_home_bt_proxy.config_flow.GLocalAuthenticationTokens"
-    with patch(patch_path) as mock_tokens_cls:
-        tokens_inst = mock_tokens_cls.return_value
-        tokens_inst.get_master_token = MagicMock()
-        assert await flow._validate_credentials(user_input) is True
-        assert user_input[CONF_MASTER_TOKEN] == "obtained-master-token"
-        assert CONF_PASSWORD not in user_input
+    valid = await flow._validate_credentials(user_input)
+    assert valid is False
+    assert CONF_MASTER_TOKEN not in user_input
 
 
 @pytest.mark.asyncio
-async def test_validate_credentials_with_credentials_failure():
+async def test_config_flow_pops_password_if_present():
+    """Verify async_step_user strips CONF_PASSWORD from user input."""
     flow = GoogleHomeBtProxyConfigFlow()
-    mock_hass = MagicMock()
-    mock_hass.async_add_executor_job = AsyncMock(return_value=None)
-    flow.hass = mock_hass
+    flow.hass = AsyncMock()
 
     user_input = {
         CONF_USERNAME: "user@example.com",
-        CONF_PASSWORD: "wrong-password",
+        CONF_PASSWORD: "secret_password",
+        CONF_MASTER_TOKEN: "valid-master-token",
     }
-    assert await flow._validate_credentials(user_input) is False
+    with patch.object(flow, "_validate_credentials", return_value=True):
+        result = await flow.async_step_user(user_input)
+        assert result["type"] == "create_entry"
+        assert CONF_PASSWORD not in result["data"]
+        assert CONF_PASSWORD not in user_input
 
 
 @pytest.mark.asyncio
@@ -478,12 +477,9 @@ def test_sanitize_token_formats():
     assert sanitize_token(None) == ""  # type: ignore[arg-type]
 
 
-def test_clean_string_and_clean_password():
-    """Test clean_string strips zero-width chars and clean_password strips App Password spacing."""
-    from custom_components.google_home_bt_proxy.config_flow import (
-        clean_password,
-        clean_string,
-    )
+def test_clean_string():
+    """Test clean_string strips zero-width chars and invisible characters."""
+    from custom_components.google_home_bt_proxy.config_flow import clean_string
 
     # Invisible characters: \u200b (zero-width space), \ufeff (BOM), \u200e (LTR), \u200d (ZWJ)
     dirty_email = " \u200buser@gmail.com\ufeff "
@@ -496,22 +492,10 @@ def test_clean_string_and_clean_password():
     assert clean_string("") == ""
     assert clean_string(None) == ""
 
-    # Google App Password formatting: 16 chars grouped in 4s with spaces
-    app_pwd = " abcd efgh ijkl mnop "
-    assert clean_password(app_pwd) == "abcdefghijklmnop"
-
-    # App Password with zero-width spaces inside or around
-    dirty_app_pwd = "\u200babcd efgh\u200b ijkl mnop\ufeff"
-    assert clean_password(dirty_app_pwd) == "abcdefghijklmnop"
-
-    # Normal password with words should NOT be stripped of internal spaces
-    regular_pwd_with_spaces = "my secret password phrase"
-    assert clean_password(regular_pwd_with_spaces) == "my secret password phrase"
-
 
 @pytest.mark.asyncio
 async def test_validate_credentials_cleans_all_inputs():
-    """Verify _validate_credentials cleans whitespace, zero-width chars, and app password spaces."""
+    """Verify _validate_credentials cleans whitespace and zero-width chars."""
     flow = GoogleHomeBtProxyConfigFlow()
     flow.hass = MagicMock()
 

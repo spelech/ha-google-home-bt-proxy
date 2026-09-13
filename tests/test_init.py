@@ -18,10 +18,14 @@ from custom_components.google_home_bt_proxy.api import (
     TokenExpiredError,
 )
 from custom_components.google_home_bt_proxy.const import (
+    CONF_ANDROID_ID,
     CONF_DISABLED_SPEAKERS,
+    CONF_MASTER_TOKEN,
+    CONF_PASSWORD,
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
+    CONF_USERNAME,
     DOMAIN,
 )
 from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerNode
@@ -847,3 +851,45 @@ def test_resolve_speaker_area_devices_direct_iterable():
 
     area = _resolve_speaker_area(mock_dr, speaker)
     assert area == "living_room_area"
+
+
+@pytest.mark.asyncio
+async def test_setup_entry_strips_legacy_password():
+    """Verify that async_setup_entry strips CONF_PASSWORD from existing stored config entry data."""
+    hass = MagicMock()
+    entry = MagicMock()
+    entry.data = {
+        CONF_USERNAME: "user@example.com",
+        CONF_PASSWORD: "legacy_secret_password",
+        CONF_MASTER_TOKEN: "aas_et/valid_token",
+        CONF_ANDROID_ID: "android_123",
+    }
+    entry.options = {}
+    hass.config_entries.async_update_entry = MagicMock()
+
+    # Stub dependencies
+    with (
+        patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance"),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
+        patch("custom_components.google_home_bt_proxy.GoogleHomeApiClient"),
+        patch("custom_components.google_home_bt_proxy.SpeakerPlaybackDetector"),
+        patch("custom_components.google_home_bt_proxy.async_track_time_interval", create=True),
+    ):
+        mock_coord = mock_coord_cls.return_value
+        mock_coord.async_get_speakers = AsyncMock(return_value=[])
+
+        from custom_components.google_home_bt_proxy import async_setup_entry
+
+        res = await async_setup_entry(hass, entry)
+        assert res is True
+
+        # Verify entry.data was updated to strip CONF_PASSWORD
+        hass.config_entries.async_update_entry.assert_called_once()
+        updated_data = hass.config_entries.async_update_entry.call_args[1]["data"]
+        assert CONF_PASSWORD not in updated_data
+
+        # Verify coordinator was called without password
+        call_kwargs = mock_coord_cls.call_args.kwargs
+        assert "password" not in call_kwargs

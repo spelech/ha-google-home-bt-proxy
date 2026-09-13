@@ -96,7 +96,6 @@ class GoogleHomeProxyCoordinator:
         self,
         hass: HomeAssistant,
         username: str | None = None,
-        password: str | None = None,
         master_token: str | None = None,
         android_id: str | None = None,
         zeroconf_instance: Zeroconf | None = None,
@@ -104,13 +103,15 @@ class GoogleHomeProxyCoordinator:
         """Initialize coordinator."""
         self.hass = hass
         self._username = username
-        self._password = password
         self._master_token = master_token
         self._android_id = android_id
         self._zeroconf = zeroconf_instance
+        # glocaltokens requires a non-None password string to avoid aborting early with
+        # "Username and password are not set" in get_master_token(), even when
+        # master_token is present.
         self._client = GLocalAuthenticationTokens(
             username=username,
-            password=password or "",
+            password="",
             master_token=master_token,
             android_id=android_id,
             verbose=False,

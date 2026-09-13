@@ -208,6 +208,7 @@ def test_verify_success_with_devices(capsys):
         assert code == 0
         mock_auth_cls.assert_called_once_with(
             username="user@example.com",
+            password="",
             master_token="aas_et/valid_master_token",
             android_id="android_id_555",
         )
@@ -216,6 +217,32 @@ def test_verify_success_with_devices(capsys):
         captured = capsys.readouterr()
         assert "Living Room Speaker" in captured.out
         assert "device_id_12345" in captured.out
+
+
+def test_verify_passes_empty_password_to_glocaltokens():
+    """Verify that handle_verify initializes GLocalAuthenticationTokens with password=''."""
+    with patch("scripts.auth_helper.GLocalAuthenticationTokens") as mock_auth_cls:
+        mock_client = mock_auth_cls.return_value
+        mock_client.get_access_token.return_value = "valid_token"
+        mock_client.get_google_devices.return_value = []
+
+        code = main(
+            [
+                "verify",
+                "--email",
+                "user@example.com",
+                "--master-token",
+                "aas_et/valid_token",
+            ]
+        )
+
+        assert code == 0
+        mock_auth_cls.assert_called_once_with(
+            username="user@example.com",
+            password="",
+            master_token="aas_et/valid_token",
+            android_id=mock_auth_cls.call_args.kwargs["android_id"],
+        )
 
 
 def test_verify_success_json_output(capsys):

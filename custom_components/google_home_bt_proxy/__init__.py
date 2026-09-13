@@ -103,13 +103,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Google Home Bluetooth Proxy from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
+    if CONF_PASSWORD in entry.data:
+        cleaned_data = dict(entry.data)
+        cleaned_data.pop(CONF_PASSWORD, None)
+        hass.config_entries.async_update_entry(entry, data=cleaned_data)
+
     session = async_get_clientsession(hass, verify_ssl=False)
     zc = await zeroconf.async_get_instance(hass)
 
     coordinator = GoogleHomeProxyCoordinator(
         hass=hass,
         username=entry.data.get(CONF_USERNAME),
-        password=entry.data.get(CONF_PASSWORD),
         master_token=entry.data.get(CONF_MASTER_TOKEN),
         android_id=entry.data.get(CONF_ANDROID_ID),
         zeroconf_instance=zc,
