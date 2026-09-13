@@ -135,6 +135,7 @@ def handle_verify(args: argparse.Namespace) -> int:
     try:
         client = GLocalAuthenticationTokens(
             username=email,
+            password="",  # glocaltokens requires a non-None password string to avoid aborting early
             master_token=master_token,
             android_id=android_id,
         )
