@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-09-13
+
+### Fixed
+- **Upstream `glocaltokens` Master Token Authentication Defect**:
+  - Initialized `GLocalAuthenticationTokens` with empty-string password across `coordinator.py` and `scripts/auth_helper.py`, circumventing an upstream defect where `get_master_token()` aborted early with `"Username and password are not set"` when password was `None`. (Special thanks to [@rafal83](https://github.com/rafal83) in [#16](https://github.com/spelech/ha-google-home-bt-proxy/pull/16)).
+- **Config Entry Password Auto-Migration**:
+  - Automatically prunes legacy `password` fields from stored Home Assistant configuration entries during integration setup via `hass.config_entries.async_update_entry`.
+
+### Removed
+- **Legacy Password Plumbing & Fallbacks**:
+  - Fully purged obsolete Google password parameters, helpers, and dead password-login fallbacks from `config_flow.py` and `coordinator.py`. Formally restricts validation to modern, working authentication methods (`oauth2_4/...` EmbeddedSetup token exchange and direct `master_token`).
+
 ## [1.4.1] - 2026-09-09
 
 ### Added
