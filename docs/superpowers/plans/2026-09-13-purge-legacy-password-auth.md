@@ -44,7 +44,9 @@ def test_coordinator_initializes_glocaltokens_with_empty_password_and_master_tok
     assert coordinator._client.password == ""
     assert coordinator._client.master_token == "aas_et/test_valid_master_token_format_1234567890"
     # Verify glocaltokens get_master_token returns master_token without "Username and password are not set" error
-    assert coordinator._client.get_master_token() == "aas_et/test_valid_master_token_format_1234567890"
+    assert (
+        coordinator._client.get_master_token() == "aas_et/test_valid_master_token_format_1234567890"
+    )
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -127,7 +129,9 @@ async def test_setup_entry_strips_legacy_password():
     # Stub dependencies
     with (
         patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance"),
-        patch("custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator") as mock_coord_cls,
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
         patch("custom_components.google_home_bt_proxy.GoogleHomeApiClient"),
         patch("custom_components.google_home_bt_proxy.SpeakerPlaybackDetector"),
         patch("custom_components.google_home_bt_proxy.async_track_time_interval"),
@@ -136,6 +140,7 @@ async def test_setup_entry_strips_legacy_password():
         mock_coord.async_get_speakers = AsyncMock(return_value=[])
 
         from custom_components.google_home_bt_proxy import async_setup_entry
+
         res = await async_setup_entry(hass, entry)
         assert res is True
 
