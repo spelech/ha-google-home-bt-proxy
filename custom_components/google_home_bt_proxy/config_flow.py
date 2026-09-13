@@ -102,8 +102,6 @@ def clean_string(val: Any) -> str:
     return cleaned.strip()
 
 
-
-
 def sanitize_token(token: str) -> str:
     """Extract and sanitize token from raw strings, cookie headers, or devtools copies."""
     if not token or not isinstance(token, str):
