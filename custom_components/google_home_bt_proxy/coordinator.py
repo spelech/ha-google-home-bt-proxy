@@ -110,7 +110,7 @@ class GoogleHomeProxyCoordinator:
         self._zeroconf = zeroconf_instance
         self._client = GLocalAuthenticationTokens(
             username=username,
-            password=password,
+            password=password or "",
             master_token=master_token,
             android_id=android_id,
             verbose=False,
