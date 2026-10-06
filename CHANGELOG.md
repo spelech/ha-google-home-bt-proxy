@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-10-05
+
+### Added
+- **Cache Interpolation / Halve Radio Sampling (`CONF_CACHE_INTERPOLATION`)**:
+  - Halves physical Bluetooth inquiry scans and 2.4 GHz radio noise by alternating between live hardware scans and re-injecting cached results with fresh timestamps.
+  - Guarantees sub-10s advertisement cadence (max 8.0s advertisement age), keeping packets safely below Bermuda's `AREA_MAX_AD_AGE` cutoff (10.0s) while cutting speaker CPU overhead and Wi-Fi contention by 50%.
+  - Configurable globally in the *Scanning & Bermuda Mode* options menu and per-speaker in *Speaker-Specific Overrides*.
+  - Safety guardrails automatically purge cache on 0 discovered devices (prevents ghost presence) or during audio playback and TTS alerts.
+- **Media Playback Pause Mode (`MODE_PAUSE`)**:
+  - Added dedicated `pause` playback handling mode option, allowing users to completely halt Bluetooth inquiry scans while music, podcasts, or Cast streams are active on a speaker.
+- **Google Cast Group Awareness**:
+  - Media playback and TTS alert detection automatically resolves Google Cast groups (e.g. `media_player.whole_home`), seamlessly propagating pause and throttle states to all physical speaker members.
+
+### Fixed
+- **TTS Alert Interception & Scan Suppression**:
+  - Eliminated audio stuttering, clipping, and dropped Cast connections during automated TTS announcements (laundry, alarm, doorbells) by intercepting `call_service` (`tts.speak`, `tts.*`, `tts_clear_cache`) and `media_player` state change events.
+  - Implemented immediate hardware scan abortion (`POST /setup/bluetooth/scan {"enable": false}`) when TTS alerts fire during an active inquiry scan.
+- **Eliminated `pychromecast` Socket Churn on Port 8009**:
+  - Replaced ephemeral short-lived TCP socket connections to port 8009 with zero-socket Home Assistant `media_player` entity tracking, preventing socket collision warnings and port starvation with the core Cast integration.
+- **Device Registry Identifier Collision Resolution**:
+  - Fixed an issue where speakers sharing MAC connections (e.g. stereo pairs or shared BSSIDs) caused Home Assistant to reject entity registration. Entities now link canonically via `identifiers={(DOMAIN, speaker.device_id)}` without conflicting network connection claims.
+- **Device Registry & Entity Registry Deprecation Warnings**:
+  - Directly iterate `device_registry.devices` and `entity_registry.entities` without calling `.values()` or deprecated dictionary lookup methods, ensuring forward compatibility with Home Assistant 2027.9.0.
+
 ## [1.4.2] - 2026-09-13
 
 ### Fixed
