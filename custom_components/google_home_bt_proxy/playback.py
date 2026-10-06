@@ -172,12 +172,7 @@ class SpeakerPlaybackDetector:
 
         target_dev_ids: set[str] = set()
         if hasattr(dev_reg, "devices"):
-            devices = (
-                dev_reg.devices.values()
-                if hasattr(dev_reg.devices, "values")
-                else dev_reg.devices
-            )
-            for dev in devices:
+            for dev in dev_reg.devices:
                 dev_id = getattr(dev, "id", None)
                 dev_macs = [
                     conn[1].lower()
@@ -196,8 +191,9 @@ class SpeakerPlaybackDetector:
                     target_dev_ids.add(dev_id)
 
         if hasattr(ent_reg, "entities"):
-            for eid, ent in ent_reg.entities.items():
-                if not eid.startswith("media_player."):
+            for ent in ent_reg.entities:
+                eid = getattr(ent, "entity_id", None)
+                if not eid or not eid.startswith("media_player."):
                     continue
                 if getattr(ent, "device_id", None) in target_dev_ids:
                     matched.add(eid)
@@ -226,21 +222,18 @@ class SpeakerPlaybackDetector:
 
         group_dev_ids: set[str] = set()
         if hasattr(dev_reg, "devices"):
-            devices = (
-                dev_reg.devices.values()
-                if hasattr(dev_reg.devices, "values")
-                else dev_reg.devices
-            )
-            for dev in devices:
+            for dev in dev_reg.devices:
                 dev_id = getattr(dev, "id", None)
                 model = getattr(dev, "model", None) or ""
                 if model in ("Google Cast Group", "Cast Group") and dev_id:
                     group_dev_ids.add(dev_id)
 
         if hasattr(ent_reg, "entities"):
-            for eid, ent in ent_reg.entities.items():
+            for ent in ent_reg.entities:
+                eid = getattr(ent, "entity_id", None)
                 if (
-                    eid.startswith("media_player.")
+                    eid
+                    and eid.startswith("media_player.")
                     and getattr(ent, "device_id", None) in group_dev_ids
                 ):
                     groups.add(eid)
