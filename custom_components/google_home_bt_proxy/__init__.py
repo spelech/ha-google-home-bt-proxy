@@ -241,15 +241,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if hasattr(device_registry, "async_get_or_create"):
             try:
                 suggested_area = _resolve_speaker_area(device_registry, speaker)
-                speaker_device = device_registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, speaker.device_id)},
-                    connections={(dr.CONNECTION_NETWORK_MAC, speaker.mac_address.lower())},
-                    name=speaker.name,
-                    manufacturer="Google",
-                    model=speaker.hardware,
-                    suggested_area=suggested_area,
-                )
+                try:
+                    speaker_device = device_registry.async_get_or_create(
+                        config_entry_id=entry.entry_id,
+                        identifiers={(DOMAIN, speaker.device_id)},
+                        connections={(dr.CONNECTION_NETWORK_MAC, speaker.mac_address.lower())},
+                        name=speaker.name,
+                        manufacturer="Google",
+                        model=speaker.hardware,
+                        suggested_area=suggested_area,
+                    )
+                except Exception:
+                    speaker_device = device_registry.async_get_or_create(
+                        config_entry_id=entry.entry_id,
+                        identifiers={(DOMAIN, speaker.device_id)},
+                        name=speaker.name,
+                        manufacturer="Google",
+                        model=speaker.hardware,
+                        suggested_area=suggested_area,
+                    )
                 speaker_device_id = speaker_device.id
                 assigned_area = getattr(speaker_device, "area_id", None)
                 if (

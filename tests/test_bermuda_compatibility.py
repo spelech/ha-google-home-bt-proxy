@@ -283,8 +283,8 @@ async def test_async_setup_bermuda_registration():
         assert registered_scanner.source == speaker.mac_address.upper()
 
 
-def test_entity_device_info_connections():
-    """Verify entities across platforms declare CONNECTION_NETWORK_MAC."""
+def test_entity_device_info_identifiers():
+    """Verify entities across platforms link to the speaker device via identifiers."""
     speaker = SpeakerNode(
         device_id="spk_bedroom",
         name="Bedroom Speaker",
@@ -298,10 +298,10 @@ def test_entity_device_info_connections():
     switch = GoogleHomeBtProxyScannerSwitch(speaker, state)
     button = GoogleHomeBtProxyScanButton(speaker, state)
 
-    expected_conn = {("mac", "6c:ad:f8:aa:bb:cc")}
-    assert sensor.device_info["connections"] == expected_conn
-    assert switch.device_info["connections"] == expected_conn
-    assert button.device_info["connections"] == expected_conn
+    expected_ids = {(DOMAIN, "spk_bedroom")}
+    assert sensor.device_info["identifiers"] == expected_ids
+    assert switch.device_info["identifiers"] == expected_ids
+    assert button.device_info["identifiers"] == expected_ids
 
 
 def test_default_scan_timings_within_bermuda_area_max_ad_age():
