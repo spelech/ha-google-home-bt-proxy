@@ -101,6 +101,7 @@ class SpeakerProxyState:
     assigned_area: str | None = None
     bermuda_area_ready: bool = False
     trigger_scan_event: asyncio.Event = field(default_factory=asyncio.Event)
+    abort_scan_event: asyncio.Event = field(default_factory=asyncio.Event)
     callbacks: list[Callable[[], None]] = field(default_factory=list)
 
     def register_callback(self, cb: Callable[[], None]) -> Callable[[], None]:

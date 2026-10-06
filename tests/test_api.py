@@ -324,3 +324,60 @@ async def test_start_scan_and_get_results_unsupported_404(aiohttp_client) -> Non
     with pytest.raises(SpeakerUnsupportedError):
         await api_client.get_scan_results(speaker)
     assert speaker.available is False
+
+
+@pytest.mark.asyncio
+async def test_stop_scan_success(aiohttp_client) -> None:
+    """Verify stop_scan successfully sends enable=False."""
+    scan_stopped = False
+
+    async def handle_stop(request: web.Request) -> web.Response:
+        nonlocal scan_stopped
+        assert request.headers.get("cast-local-authorization-token") == "test-token"
+        payload = await request.json()
+        assert payload.get("enable") is False
+        scan_stopped = True
+        return web.json_response({"success": True})
+
+    app = web.Application()
+    app.router.add_post("/setup/bluetooth/scan", handle_stop)
+
+    client = await aiohttp_client(app)
+    api_client = GoogleHomeApiClient(client.session, port=client.server.port, use_ssl=False)
+
+    speaker = SpeakerNode(
+        device_id="test-spk",
+        name="Test Speaker",
+        ip_address=str(client.server.host),
+        auth_token="test-token",
+    )
+
+    success = await api_client.stop_scan(speaker)
+    assert success is True
+    assert scan_stopped is True
+    assert speaker.available is True
+
+
+@pytest.mark.asyncio
+async def test_stop_scan_unsupported_404(aiohttp_client) -> None:
+    """Verify stop_scan raises SpeakerUnsupportedError on HTTP 404."""
+
+    async def handle_404(request: web.Request) -> web.Response:
+        return web.Response(status=404)
+
+    app = web.Application()
+    app.router.add_post("/setup/bluetooth/scan", handle_404)
+
+    client = await aiohttp_client(app)
+    api_client = GoogleHomeApiClient(client.session, port=client.server.port, use_ssl=False)
+
+    speaker = SpeakerNode(
+        device_id="test-spk",
+        name="Test Speaker",
+        ip_address=str(client.server.host),
+        auth_token="test-token",
+    )
+
+    with pytest.raises(SpeakerUnsupportedError):
+        await api_client.stop_scan(speaker)
+    assert speaker.available is False

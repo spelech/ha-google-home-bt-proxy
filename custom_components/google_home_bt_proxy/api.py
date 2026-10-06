@@ -98,6 +98,35 @@ class GoogleHomeApiClient:
             speaker.available = False
             raise SpeakerConnectionError(f"Connection failed to {speaker.name}: {err}") from err
 
+    async def stop_scan(self, speaker: SpeakerNode) -> bool:
+        """Abort or stop an ongoing Bluetooth inquiry scan on the speaker."""
+        url = self._build_url(speaker.ip_address, ENDPOINT_BLUETOOTH_SCAN)
+        payload = {"enable": False}
+
+        try:
+            async with self._session.post(
+                url,
+                json=payload,
+                headers=self._headers(speaker.auth_token),
+                timeout=self._timeout,
+                ssl=False,
+            ) as resp:
+                if resp.status == 401:
+                    raise TokenExpiredError(f"Token expired on speaker {speaker.name}")
+                if resp.status == 404:
+                    speaker.available = False
+                    raise SpeakerUnsupportedError(
+                        f"Bluetooth scan API not supported on {speaker.name} (HTTP 404)"
+                    )
+                if resp.status == 200:
+                    speaker.available = True
+                    return True
+                _LOGGER.warning("Failed to stop scan on %s: HTTP %d", speaker.name, resp.status)
+                return False
+        except (aiohttp.ClientError, TimeoutError) as err:
+            speaker.available = False
+            raise SpeakerConnectionError(f"Connection failed to {speaker.name}: {err}") from err
+
     async def get_scan_results(self, speaker: SpeakerNode) -> list[DiscoveredDevice]:
         """Fetch discovered Bluetooth devices from the speaker."""
         url = self._build_url(speaker.ip_address, ENDPOINT_BLUETOOTH_SCAN_RESULTS)

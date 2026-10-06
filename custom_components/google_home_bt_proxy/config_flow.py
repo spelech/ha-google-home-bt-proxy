@@ -72,6 +72,7 @@ from .const import (
     FILTER_MODE_WHITELIST,
     GLOBAL_SETTINGS,
     MODE_IGNORE,
+    MODE_PAUSE,
     MODE_SKIP_CEILING,
     MODE_THROTTLE,
     NAME,
@@ -408,7 +409,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_PLAYBACK_MODE,
                     default=options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
-                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
+                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_PAUSE, MODE_IGNORE]),
                 vol.Optional(
                     CONF_PLAYING_SCAN_TIMEOUT,
                     default=options.get(CONF_PLAYING_SCAN_TIMEOUT, DEFAULT_PLAYING_SCAN_TIMEOUT),
@@ -605,7 +606,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_PLAYBACK_MODE,
                         options.get(CONF_PLAYBACK_MODE, DEFAULT_PLAYBACK_MODE),
                     ),
-                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_IGNORE]),
+                ): vol.In([MODE_THROTTLE, MODE_SKIP_CEILING, MODE_PAUSE, MODE_IGNORE]),
                 vol.Optional(
                     CONF_SCAN_TIMEOUT,
                     default=existing_overrides.get(

@@ -59,6 +59,7 @@ ORCHESTRATION_ROUND_ROBIN: Final = "round_robin"
 # Playback modes
 MODE_THROTTLE: Final = "throttle"
 MODE_SKIP_CEILING: Final = "skip_ceiling"
+MODE_PAUSE: Final = "pause"
 MODE_IGNORE: Final = "ignore"
 
 CONF_BERMUDA_MODE: Final = "bermuda_mode"

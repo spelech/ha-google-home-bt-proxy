@@ -82,7 +82,7 @@
           "max_playing_skip_duration": "Max Continuous Playback Skip Ceiling (seconds)"
         },
         "data_description": {
-          "playback_mode": "throttle reduces scan frequency while music plays; skip_ceiling pauses scanning completely up to a time limit; ignore continues normal scanning.",
+          "playback_mode": "throttle reduces scan frequency while music plays; skip_ceiling pauses scanning up to a ceiling limit; pause completely pauses scanning during playback; ignore continues normal scanning.",
           "playing_scan_timeout": "Scan duration in seconds while media is actively streaming (default: 2).",
           "playing_scan_interval": "Seconds to wait between scans while media is actively streaming (default: 30).",
           "max_playing_skip_duration": "Maximum continuous seconds scanning may be delayed during long media playback sessions before forcing a scan (default: 120)."
@@ -168,7 +168,7 @@
           "custom_settings": "Check to override global settings with the custom values configured below for this speaker.",
           "bermuda_mode": "Enable Bermuda optimization mode for this speaker (forwards raw RSSI, sets 0 dBm offset).",
           "filter_peer_proxies": "Suppress advertisements from peer Google Home speakers for this speaker.",
-          "playback_mode": "Media playback handling mode for this speaker: throttle, skip_ceiling, or ignore.",
+          "playback_mode": "Media playback handling mode for this speaker: throttle, skip_ceiling, pause, or ignore.",
           "scan_timeout": "Custom idle scan duration in seconds for this speaker.",
           "scan_interval": "Custom idle scan interval in seconds for this speaker.",
           "playing_scan_timeout": "Custom scan duration in seconds while media is playing on this speaker.",

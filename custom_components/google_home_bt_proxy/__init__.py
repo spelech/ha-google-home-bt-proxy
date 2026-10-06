@@ -71,6 +71,7 @@ from .const import (
     DEFAULT_SCAN_TIMEOUT,
     DOMAIN,
     MODE_IGNORE,
+    MODE_PAUSE,
     MODE_SKIP_CEILING,
     MODE_THROTTLE,
     ORCHESTRATION_INDEPENDENT,
@@ -120,7 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     api_client = GoogleHomeApiClient(session=session)
-    playback_detector = SpeakerPlaybackDetector(api_client=api_client)
+    playback_detector = SpeakerPlaybackDetector(api_client=api_client, hass=hass)
     speakers = await coordinator.async_get_speakers()
 
     disabled_speakers: list[str] = entry.options.get(CONF_DISABLED_SPEAKERS, [])
@@ -325,6 +326,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         worker_tasks.append(task)
 
+    unsub_playback = playback_detector.async_setup(speakers_data)
+    unregister_callbacks.append(unsub_playback)
+
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
         "api_client": api_client,
@@ -501,7 +505,7 @@ async def _speaker_scan_loop(
 ) -> None:
     """Continuous staggered polling scan loop for an individual speaker."""
     if playback_detector is None:
-        playback_detector = SpeakerPlaybackDetector(api_client)
+        playback_detector = SpeakerPlaybackDetector(api_client, hass=hass)
     if state is None:
         state = SpeakerProxyState(enabled=speaker.enabled)
     if orchestrator is None:
@@ -671,17 +675,33 @@ async def _speaker_scan_loop(
                 _LOGGER.debug("Error checking playback status on %s: %s", speaker.name, err)
                 is_playing = False
 
+        # Independent TTS check: TTS alerts always suppress scanning regardless of playback_mode
+        is_tts = False
+        if hasattr(playback_detector, "is_tts_active"):
+            tts_res = playback_detector.is_tts_active(speaker)
+            if isinstance(tts_res, bool):
+                is_tts = tts_res
+
         should_scan = True
         active_timeout = idle_scan_timeout
         active_interval = idle_scan_interval
 
         now = time.monotonic()
 
-        if is_playing:
+        if is_tts:
+            should_scan = False
+            active_interval = idle_scan_interval
+            state.status = "tts_paused"
+            state.notify_callbacks()
+        elif is_playing:
             if continuous_skip_start is None:
                 continuous_skip_start = now
 
-            if playback_mode == MODE_THROTTLE:
+            if playback_mode == MODE_PAUSE:
+                should_scan = False
+                active_interval = idle_scan_interval
+                state.status = "playback_paused"
+            elif playback_mode == MODE_THROTTLE:
                 active_timeout = playing_scan_timeout
                 active_interval = playing_scan_interval
                 should_scan = True
@@ -733,8 +753,38 @@ async def _speaker_scan_loop(
                     # 1. Trigger hardware scan
                     await api_client.start_scan(speaker, timeout=active_timeout)
 
-                    # 2. Await hardware scan duration
-                    await asyncio.sleep(active_timeout)
+                    # 2. Await hardware scan duration with abort support
+                    state.abort_scan_event.clear()
+                    aborted = False
+                    if state.abort_scan_event.is_set():
+                        aborted = True
+                    else:
+                        sleep_task = asyncio.create_task(asyncio.sleep(active_timeout))
+                        abort_task = asyncio.create_task(state.abort_scan_event.wait())
+                        done, pending = await asyncio.wait(
+                            [sleep_task, abort_task],
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        for t in pending:
+                            t.cancel()
+                        if abort_task in done:
+                            aborted = True
+                        else:
+                            await sleep_task
+
+                    if aborted:
+                        _LOGGER.info(
+                            "Active Bluetooth scan on %s aborted due to incoming TTS/audio alert",
+                            speaker.name,
+                        )
+                        try:
+                            await api_client.stop_scan(speaker)
+                        except Exception as err:
+                            _LOGGER.debug("Error stopping scan on %s: %s", speaker.name, err)
+                        state.status = "tts_paused"
+                        state.notify_callbacks()
+                        await asyncio.sleep(1.0)
+                        continue
 
                     # 3. Retrieve scan results
                     results = await api_client.get_scan_results(speaker)
