@@ -17,6 +17,7 @@ CONF_ANDROID_ID: Final = "android_id"
 # Options keys
 CONF_SCAN_TIMEOUT: Final = "scan_timeout"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+CONF_CACHE_INTERPOLATION: Final = "cache_interpolation"
 CONF_PLAYBACK_MODE: Final = "playback_mode"
 CONF_PLAYING_SCAN_TIMEOUT: Final = "playing_scan_timeout"
 CONF_PLAYING_SCAN_INTERVAL: Final = "playing_scan_interval"
@@ -68,6 +69,7 @@ CONF_FILTER_PEER_PROXIES: Final = "filter_peer_proxies"
 # Defaults
 DEFAULT_SCAN_TIMEOUT: Final = 4  # seconds for active scan
 DEFAULT_SCAN_INTERVAL: Final = 4  # seconds between scans (cycle <= 10s for Bermuda)
+DEFAULT_CACHE_INTERPOLATION: Final = False  # alternate physical scans with cached replays
 DEFAULT_PLAYBACK_MODE: Final = MODE_THROTTLE
 DEFAULT_PLAYING_SCAN_TIMEOUT: Final = 2  # seconds for active scan during playback
 DEFAULT_PLAYING_SCAN_INTERVAL: Final = 30  # seconds between scans during playback

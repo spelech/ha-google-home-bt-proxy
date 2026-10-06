@@ -62,14 +62,16 @@
           "filter_peer_proxies": "Filter Peer Google Home Speakers",
           "orchestration_mode": "Multi-Speaker Orchestration Mode",
           "scan_timeout": "Idle Scan Duration (seconds)",
-          "scan_interval": "Idle Scan Interval (seconds)"
+          "scan_interval": "Idle Scan Interval (seconds)",
+          "cache_interpolation": "Cache Interpolation / Halve Radio Sampling"
         },
         "data_description": {
           "bermuda_mode": "Optimizes Bluetooth packets for Bermuda: forwards raw instantaneous RSSI (bypasses proxy smoothing) and sets 0 dBm offset so Bermuda handles asymmetric smoothing and scanner calibration natively.",
           "filter_peer_proxies": "Automatically suppress advertisements from other Google Home speakers in your home to avoid crosstalk and ghost devices.",
           "orchestration_mode": "round_robin staggers scans across speakers to prevent 2.4GHz Wi-Fi congestion; independent runs each speaker on its own schedule.",
           "scan_timeout": "How many seconds each Bluetooth inquiry scan runs when the speaker is idle (default: 4).",
-          "scan_interval": "Seconds to wait between scans when the speaker is idle (default: 4, keeps total cycle <= 10s for Bermuda AREA_MAX_AD_AGE)."
+          "scan_interval": "Seconds to wait between scans when the speaker is idle (default: 4, keeps total cycle <= 10s for Bermuda AREA_MAX_AD_AGE).",
+          "cache_interpolation": "Halves physical Bluetooth inquiry scans and 2.4 GHz radio noise by alternating between live hardware scans and re-injecting cached results with fresh timestamps. Keeps advertisement age well below Bermuda's 10s cutoff while cutting speaker CPU and Wi-Fi airtime."
         }
       },
       "playback": {
@@ -149,6 +151,7 @@
           "playback_mode": "Media Playback Handling Mode",
           "scan_timeout": "Idle Scan Duration (seconds)",
           "scan_interval": "Idle Scan Interval (seconds)",
+          "cache_interpolation": "Cache Interpolation / Halve Radio Sampling",
           "playing_scan_timeout": "Playback Scan Duration (seconds)",
           "playing_scan_interval": "Playback Scan Interval (seconds)",
           "max_playing_skip_duration": "Max Continuous Playback Skip Ceiling (seconds)",
@@ -171,6 +174,7 @@
           "playback_mode": "Media playback handling mode for this speaker: throttle, skip_ceiling, pause, or ignore.",
           "scan_timeout": "Custom idle scan duration in seconds for this speaker.",
           "scan_interval": "Custom idle scan interval in seconds for this speaker.",
+          "cache_interpolation": "Enable or disable cache interpolation for this speaker to cut physical scans by 50%.",
           "playing_scan_timeout": "Custom scan duration in seconds while media is playing on this speaker.",
           "playing_scan_interval": "Custom scan interval in seconds while media is playing on this speaker.",
           "max_playing_skip_duration": "Custom playback skip ceiling in seconds for this speaker.",

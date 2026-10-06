@@ -893,3 +893,196 @@ async def test_setup_entry_strips_legacy_password():
         # Verify coordinator was called without password
         call_kwargs = mock_coord_cls.call_args.kwargs
         assert "password" not in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_cache_interpolation_alternating():
+    """Verify cache interpolation cuts physical scans by 50% while replaying advertisements."""
+    from custom_components.google_home_bt_proxy.const import CONF_CACHE_INTERPOLATION
+    from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerProxyState
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {CONF_CACHE_INTERPOLATION: True}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    device = DiscoveredDevice(mac_address="AA:BB:CC:DD:EE:FF", rssi=-60)
+    mock_api.get_scan_results = AsyncMock(return_value=[device])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-cache-test",
+        name="Cache Speaker",
+        ip_address="192.168.1.150",
+        auth_token="auth-cache",
+    )
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=1)
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    mock_detector.is_tts_active = MagicMock(return_value=False)
+
+    state = SpeakerProxyState(enabled=True)
+
+    iteration = 0
+
+    async def mock_sleep(duration):
+        nonlocal iteration
+        iteration += 1
+        # 1 initial delay + 4 cycles * 2 sleeps = 9 sleeps total
+        if iteration >= 9:
+            raise asyncio.CancelledError()
+        return None
+
+    with patch("asyncio.sleep", side_effect=mock_sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    # In 4 completed cycles, hardware start_scan was only called on cycles 1 and 3 (2 times total)
+    assert mock_api.start_scan.call_count == 2
+    # But Home Assistant / Bermuda received advertisements on all 4 cycles
+    assert mock_scanner.process_scan_results.call_count == 4
+    assert state.status == "idle"
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_cache_interpolation_empty_results_no_replay():
+    """Verify cache interpolation does not replay when hardware scan detects 0 devices."""
+    from custom_components.google_home_bt_proxy.const import CONF_CACHE_INTERPOLATION
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {CONF_CACHE_INTERPOLATION: True}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-empty-cache",
+        name="Empty Cache Speaker",
+        ip_address="192.168.1.151",
+        auth_token="auth-cache",
+    )
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=0)
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    mock_detector.is_tts_active = MagicMock(return_value=False)
+
+    state = SpeakerProxyState(enabled=True)
+
+    iteration = 0
+
+    async def mock_sleep(duration):
+        nonlocal iteration
+        iteration += 1
+        # 1 initial delay + 2 cycles * 2 sleeps = 5 sleeps total
+        if iteration >= 5:
+            raise asyncio.CancelledError()
+        return None
+
+    with patch("asyncio.sleep", side_effect=mock_sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    # When no devices detected, both cycles perform hardware scans without caching empty data
+    assert mock_api.start_scan.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_cache_interpolation_aborts_on_tts():
+    """Verify virtual cache interpolation cycle aborts cleanly when TTS alert triggers."""
+    from custom_components.google_home_bt_proxy.const import CONF_CACHE_INTERPOLATION
+    from custom_components.google_home_bt_proxy.models import DiscoveredDevice, SpeakerProxyState
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {CONF_CACHE_INTERPOLATION: True}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    device = DiscoveredDevice(mac_address="AA:BB:CC:DD:EE:FF", rssi=-60)
+    mock_api.get_scan_results = AsyncMock(return_value=[device])
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-abort-cache",
+        name="Abort Cache Speaker",
+        ip_address="192.168.1.152",
+        auth_token="auth-cache",
+    )
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=1)
+
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    mock_detector.is_tts_active = MagicMock(return_value=False)
+
+    state = SpeakerProxyState(enabled=True)
+
+    iteration = 0
+
+    async def mock_sleep(duration):
+        nonlocal iteration
+        iteration += 1
+        if iteration == 1:
+            # Initial delay
+            return None
+        elif iteration == 2:
+            # Cycle 1 hardware scan sleep
+            return None
+        elif iteration == 3:
+            # Cycle 1 interval sleep
+            return None
+        elif iteration == 4:
+            # Cycle 2 virtual scan duration sleep: trigger abort
+            state.abort_scan_event.set()
+            return None
+        elif iteration >= 5:
+            # Post-abort recovery sleep
+            raise asyncio.CancelledError()
+        return None
+
+    with patch("asyncio.sleep", side_effect=mock_sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+            )
+
+    # Virtual cycle aborted to tts_paused and did not replay cached result
+    assert mock_scanner.process_scan_results.call_count == 1
+    assert state.status == "tts_paused"

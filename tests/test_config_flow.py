@@ -803,3 +803,49 @@ async def test_options_flow_signal_processing_and_orchestration():
     assert spk_notice["type"] == "form"
     assert len(spk_notice["data_schema"].schema) == 0
     assert spk_notice["description_placeholders"]["bermuda_notice"] == BERMUDA_NOTICE
+
+
+@pytest.mark.asyncio
+async def test_options_flow_cache_interpolation():
+    """Verify options flow supports cache interpolation globally and per speaker."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_CACHE_INTERPOLATION,
+        CONF_CUSTOM_SETTINGS,
+        CONF_SPEAKER_OVERRIDES,
+    )
+
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+    mock_entry.entry_id = "entry-test"
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+
+    # 1. Global scanning step schema includes CONF_CACHE_INTERPOLATION
+    scan_form = await handler.async_step_scanning(None)
+    assert scan_form["type"] == "form"
+    schema_keys = [k.schema for k in scan_form["data_schema"].schema.keys()]
+    assert CONF_CACHE_INTERPOLATION in schema_keys
+
+    # Save global cache interpolation = True
+    save_res = await handler.async_step_scanning({CONF_CACHE_INTERPOLATION: True})
+    assert save_res["type"] == "create_entry"
+    assert save_res["data"][CONF_CACHE_INTERPOLATION] is True
+
+    # 2. Speaker-specific override schema includes CONF_CACHE_INTERPOLATION
+    mock_spk_entry = MagicMock()
+    mock_spk_entry.options = {CONF_CACHE_INTERPOLATION: False}
+    mock_spk_entry.entry_id = "entry-spk-test"
+    handler_spk = GoogleHomeBtProxyOptionsFlowHandler(mock_spk_entry)
+    handler_spk._selected_speaker = "spk-kitchen"
+
+    spk_form = await handler_spk.async_step_speaker_settings(None)
+    assert spk_form["type"] == "form"
+    spk_keys = [k.schema for k in spk_form["data_schema"].schema.keys()]
+    assert CONF_CACHE_INTERPOLATION in spk_keys
+
+    # Save speaker override with cache interpolation = True
+    spk_save = await handler_spk.async_step_speaker_settings(
+        {CONF_CUSTOM_SETTINGS: True, CONF_CACHE_INTERPOLATION: True}
+    )
+    assert spk_save["type"] == "create_entry"
+    overrides = spk_save["data"][CONF_SPEAKER_OVERRIDES]
+    assert overrides["spk-kitchen"][CONF_CACHE_INTERPOLATION] is True

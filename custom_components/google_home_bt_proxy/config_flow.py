@@ -20,6 +20,7 @@ from .const import (
     BERMUDA_NOTICE,
     CONF_ANDROID_ID,
     CONF_BERMUDA_MODE,
+    CONF_CACHE_INTERPOLATION,
     CONF_CUSTOM_SETTINGS,
     CONF_ENABLE_DISTANCE_ESTIMATION,
     CONF_ENABLE_RSSI_SMOOTHING,
@@ -48,6 +49,7 @@ from .const import (
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
     DEFAULT_BERMUDA_MODE,
+    DEFAULT_CACHE_INTERPOLATION,
     DEFAULT_ENABLE_DISTANCE_ESTIMATION,
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
@@ -390,6 +392,10 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_SCAN_INTERVAL,
                     default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                 ): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
+                vol.Optional(
+                    CONF_CACHE_INTERPOLATION,
+                    default=options.get(CONF_CACHE_INTERPOLATION, DEFAULT_CACHE_INTERPOLATION),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="scanning", data_schema=schema)
@@ -621,6 +627,13 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                         options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
                     ),
                 ): vol.All(vol.Coerce(int), vol.Range(min=2, max=60)),
+                vol.Optional(
+                    CONF_CACHE_INTERPOLATION,
+                    default=existing_overrides.get(
+                        CONF_CACHE_INTERPOLATION,
+                        options.get(CONF_CACHE_INTERPOLATION, DEFAULT_CACHE_INTERPOLATION),
+                    ),
+                ): bool,
                 vol.Optional(
                     CONF_PLAYING_SCAN_TIMEOUT,
                     default=existing_overrides.get(
