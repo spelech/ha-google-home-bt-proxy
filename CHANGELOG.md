@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-10-16
+
+### Fixed
+- **Resilient Cast IPv4 Address Resolution & Link-Local IPv6 Immunity**:
+  - Added certificate hash (`cd`) property lookup in `resolve_cast_ipv4_map` to properly match `glocaltokens`'s `NetworkDevice.unique_id`.
+  - Added automatic fallback to an isolated, dedicated Zeroconf probe if the primary shared Zeroconf instance yields zero records during startup or reload.
+  - Protected Home Assistant's shared Zeroconf instance by passing `zeroconf_instance=None` to `glocaltokens.get_google_devices()`, eliminating upstream socket close side-effects.
+  - Implemented persistent coordinator IPv4 caching across discovery cycles, preventing temporary mDNS packet drops from reverting valid speakers to unroutable `fe80::` IPv6 link-local addresses.
+  - Added automatic speaker IPv4 canonicalization from `eureka_info` payloads in `get_device_info`.
+  - Enhanced connection error recovery in Bluetooth scan workers to immediately resume scanning with a 1.0s backoff once IPv4 is restored.
+
 ## [1.5.0] - 2026-10-05
 
 ### Added

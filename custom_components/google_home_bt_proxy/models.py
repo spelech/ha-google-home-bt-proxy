@@ -4,8 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 from collections.abc import Callable
 from dataclasses import dataclass, field
+
+
+def is_valid_ipv4(address: str | None) -> bool:
+    """Return True if the string is a valid IPv4 address."""
+    if not address or not isinstance(address, str):
+        return False
+    try:
+        return isinstance(ipaddress.ip_address(address.strip()), ipaddress.IPv4Address)
+    except ValueError:
+        return False
 
 
 def is_valid_mac(mac: str | None) -> bool:

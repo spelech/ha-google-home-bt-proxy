@@ -983,6 +983,13 @@ async def _speaker_scan_loop(
                         speaker.ip_address,
                     )
                     await coordinator.async_refresh_token(speaker)
+                    if is_valid_ipv4(speaker.ip_address):
+                        _LOGGER.info(
+                            "Recovered IPv4 address %s for %s",
+                            speaker.ip_address,
+                            speaker.name,
+                        )
+                        backoff = 1.0
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2.0, 60.0)
                 continue

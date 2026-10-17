@@ -248,7 +248,48 @@ async def test_coordinator_skips_non_speaker_cast_hardware():
 
 
 def test_resolve_cast_ipv4_map_reuses_hazeroconf():
-    """Verify resolve_cast_ipv4_map reuses HA zeroconf without instantiating a new Zeroconf."""
+    """Verify resolve_cast_ipv4_map reuses HA zeroconf without new Zeroconf when records found."""
+    mock_ha_zc = MagicMock()
+    type(mock_ha_zc).__name__ = "HaZeroconf"
+    mock_ha_zc.close = MagicMock()
+
+    mock_info = MagicMock()
+    mock_info.parsed_addresses.return_value = ["192.168.1.100"]
+    mock_info.properties = {
+        b"fn": b"Living Room Speaker",
+        b"id": b"7f16e76e-dd80-f2a0-3cfd-084fbb6affd0",
+        b"cd": b"E6C5AC2867F5D9202DEAEC1DD1BDEFC5",
+    }
+    mock_ha_zc.get_service_info.return_value = mock_info
+
+    from unittest.mock import patch
+
+    with (
+        patch("custom_components.google_home_bt_proxy.coordinator.ServiceBrowser") as mock_browser,
+        patch("custom_components.google_home_bt_proxy.coordinator.Zeroconf") as mock_new_zc,
+        patch("time.sleep"),
+    ):
+        mock_browser_inst = MagicMock()
+
+        def simulate_service(zc, type_, listener):
+            listener.add_service(zc, type_, "Google-Nest-Mini._googlecast._tcp.local.")
+            return mock_browser_inst
+
+        mock_browser.side_effect = simulate_service
+
+        ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(mock_ha_zc, timeout=0.01)
+
+        # Should NOT instantiate a new Zeroconf because records were found
+        mock_new_zc.assert_not_called()
+        # Should NOT close the shared HaZeroconf
+        mock_ha_zc.close.assert_not_called()
+        assert ipv4_by_name["living room speaker"] == "192.168.1.100"
+        assert ipv4_by_id["7f16e76e-dd80-f2a0-3cfd-084fbb6affd0"] == "192.168.1.100"
+        assert ipv4_by_id["e6c5ac2867f5d9202deaec1dd1bdefc5"] == "192.168.1.100"
+
+
+def test_resolve_cast_ipv4_map_fallback_when_hazeroconf_empty():
+    """Verify resolve_cast_ipv4_map invokes standalone Zeroconf when HA zeroconf has 0 records."""
     mock_ha_zc = MagicMock()
     type(mock_ha_zc).__name__ = "HaZeroconf"
     mock_ha_zc.close = MagicMock()
@@ -260,19 +301,18 @@ def test_resolve_cast_ipv4_map_reuses_hazeroconf():
         patch("custom_components.google_home_bt_proxy.coordinator.Zeroconf") as mock_new_zc,
         patch("time.sleep"),
     ):
+        mock_fallback_zc = MagicMock()
+        mock_new_zc.return_value = mock_fallback_zc
         mock_browser_inst = MagicMock()
         mock_browser.return_value = mock_browser_inst
 
         ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(mock_ha_zc, timeout=0.01)
 
-        # Should NOT instantiate a new Zeroconf
-        mock_new_zc.assert_not_called()
-        # Should NOT close the shared HaZeroconf
+        # Should have instantiated fallback Zeroconf and closed it
+        mock_new_zc.assert_called_once()
+        mock_fallback_zc.close.assert_called_once()
+        # HaZeroconf should never be closed
         mock_ha_zc.close.assert_not_called()
-        # Should create browser with the shared instance
-        mock_browser.assert_called_once()
-        assert mock_browser.call_args[0][0] == mock_ha_zc
-        mock_browser_inst.cancel.assert_called_once()
 
 
 def test_resolve_cast_ipv4_map_fallback_when_none():
@@ -312,3 +352,87 @@ def test_coordinator_initializes_glocaltokens_with_empty_password_and_master_tok
     assert coordinator._client.master_token == token
     # Verify glocaltokens get_master_token returns master_token without missing password error
     assert coordinator._client.get_master_token() == token
+
+
+@pytest.mark.asyncio
+async def test_coordinator_resolves_ipv4_from_certificate_hash():
+    """Verify coordinator resolves non-IPv4 addresses using certificate hash (cd) unique_id."""
+    mock_hass = MagicMock()
+
+    async def run_sync(func):
+        return func()
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=run_sync)
+
+    dev_ipv6 = MagicMock()
+    dev_ipv6.device_id = "spk-1"
+    dev_ipv6.device_name = "Living Room Speaker"
+    dev_ipv6.ip_address = "fe80::fa0f:f9ff:fe65:5ffe"
+    dev_ipv6.local_auth_token = "token-1"
+    dev_ipv6.hardware = "Google Nest Mini"
+
+    # NetworkDevice with certificate hash unique_id
+    mock_nd = MagicMock()
+    mock_nd.unique_id = "E6C5AC2867F5D9202DEAEC1DD1BDEFC5"
+    dev_ipv6.network_device = mock_nd
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        master_token="test-master-token",
+    )
+    coordinator._client.get_google_devices = MagicMock(return_value=[dev_ipv6])
+
+    from unittest.mock import patch
+
+    with patch(
+        "custom_components.google_home_bt_proxy.coordinator.resolve_cast_ipv4_map"
+    ) as mock_resolve:
+        # map has certificate hash in lowercase
+        mock_resolve.return_value = (
+            {"e6c5ac2867f5d9202deaec1dd1bdefc5": "10.0.0.114"},
+            {},
+        )
+        speakers = await coordinator.async_get_speakers()
+
+    assert len(speakers) == 1
+    assert speakers[0].ip_address == "10.0.0.114"
+    # Coordinator cache should now be populated
+    assert coordinator._ipv4_cache["spk-1"] == "10.0.0.114"
+
+
+@pytest.mark.asyncio
+async def test_coordinator_resolves_ipv4_from_cache_fallback():
+    """Verify coordinator uses cached IPv4 when Zeroconf returns no match."""
+    mock_hass = MagicMock()
+
+    async def run_sync(func):
+        return func()
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=run_sync)
+
+    dev_ipv6 = MagicMock()
+    dev_ipv6.device_id = "spk-1"
+    dev_ipv6.device_name = "Office Speaker"
+    dev_ipv6.ip_address = "fe80::22df:b9ff:fe2a:db3c"
+    dev_ipv6.local_auth_token = "token-1"
+    dev_ipv6.hardware = "Google Home Mini"
+    dev_ipv6.network_device = None
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        master_token="test-master-token",
+    )
+    # Pre-populate cache
+    coordinator._ipv4_cache["spk-1"] = "10.0.0.110"
+    coordinator._client.get_google_devices = MagicMock(return_value=[dev_ipv6])
+
+    from unittest.mock import patch
+
+    with patch(
+        "custom_components.google_home_bt_proxy.coordinator.resolve_cast_ipv4_map"
+    ) as mock_resolve:
+        mock_resolve.return_value = ({}, {})
+        speakers = await coordinator.async_get_speakers()
+
+    assert len(speakers) == 1
+    assert speakers[0].ip_address == "10.0.0.110"

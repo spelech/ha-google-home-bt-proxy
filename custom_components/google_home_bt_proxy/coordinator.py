@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -10,13 +9,12 @@ from typing import TYPE_CHECKING
 from glocaltokens.client import GLocalAuthenticationTokens
 from zeroconf import ServiceBrowser, Zeroconf
 
-from .models import SpeakerNode
+from .models import SpeakerNode, is_valid_ipv4
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
-
 
 EXCLUDED_HARDWARE_KEYWORDS: tuple[str, ...] = (
     "shield",
@@ -30,14 +28,6 @@ EXCLUDED_HARDWARE_KEYWORDS: tuple[str, ...] = (
     "group",
     "matterhub",
 )
-
-
-def is_valid_ipv4(address: str) -> bool:
-    """Check if the string is a valid IPv4 address."""
-    try:
-        return isinstance(ipaddress.ip_address(address), ipaddress.IPv4Address)
-    except ValueError:
-        return False
 
 
 def resolve_cast_ipv4_map(
@@ -59,10 +49,13 @@ def resolve_cast_ipv4_map(
                 ipv4 = ipv4_addrs[0]
                 fn = info.properties.get(b"fn", b"").decode("utf-8", "ignore")
                 uid = info.properties.get(b"id", b"").decode("utf-8", "ignore")
+                cd = info.properties.get(b"cd", b"").decode("utf-8", "ignore")
                 if fn:
                     ipv4_by_name[fn.strip().lower()] = ipv4
                 if uid:
                     ipv4_by_id[uid.strip().lower()] = ipv4
+                if cd:
+                    ipv4_by_id[cd.strip().lower()] = ipv4
             except Exception:
                 pass
 
@@ -72,19 +65,31 @@ def resolve_cast_ipv4_map(
         def remove_service(self, zc_instance: Zeroconf, type_: str, name: str) -> None:
             pass
 
+    listener = _CastIPv4Listener()
     should_close = False
     try:
         zc_raw = zc
         if zc_raw is None:
             zc_raw = Zeroconf()
             should_close = True
-        browser = ServiceBrowser(zc_raw, "_googlecast._tcp.local.", _CastIPv4Listener())
+        browser = ServiceBrowser(zc_raw, "_googlecast._tcp.local.", listener)
         time.sleep(timeout)
         browser.cancel()
         if should_close:
             zc_raw.close()
     except Exception as err:
         _LOGGER.debug("Zeroconf IPv4 resolution encountered error: %s", err)
+
+    if not ipv4_by_id and not ipv4_by_name and not should_close:
+        _LOGGER.debug("Primary Zeroconf yielded no Cast IPv4 records; running fallback probe")
+        try:
+            fallback_zc = Zeroconf()
+            fallback_browser = ServiceBrowser(fallback_zc, "_googlecast._tcp.local.", listener)
+            time.sleep(timeout)
+            fallback_browser.cancel()
+            fallback_zc.close()
+        except Exception as err:
+            _LOGGER.debug("Fallback Zeroconf IPv4 resolution encountered error: %s", err)
 
     return ipv4_by_id, ipv4_by_name
 
@@ -117,6 +122,7 @@ class GoogleHomeProxyCoordinator:
             verbose=False,
         )
         self.speakers: dict[str, SpeakerNode] = {}
+        self._ipv4_cache: dict[str, str] = {}
 
     async def async_get_speakers(self, force_reload: bool = False) -> list[SpeakerNode]:
         """Discover Google Home speakers and retrieve local authentication tokens."""
@@ -126,7 +132,7 @@ class GoogleHomeProxyCoordinator:
         def _fetch_devices():
             ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(self._zeroconf)
             raw = self._client.get_google_devices(
-                zeroconf_instance=self._zeroconf,
+                zeroconf_instance=None,
                 force_homegraph_reload=force_reload,
             )
             return raw, ipv4_by_id, ipv4_by_name
@@ -159,9 +165,10 @@ class GoogleHomeProxyCoordinator:
                 continue
 
             ip_address = dev.ip_address
+            unique_id = getattr(getattr(dev, "network_device", None), "unique_id", "") or ""
+            target_name = (dev.device_name or "").strip().lower()
+
             if not is_valid_ipv4(ip_address):
-                unique_id = getattr(getattr(dev, "network_device", None), "unique_id", "") or ""
-                target_name = (dev.device_name or "").strip().lower()
                 if unique_id and unique_id.lower() in ipv4_by_id:
                     ip_address = ipv4_by_id[unique_id.lower()]
                     _LOGGER.info(
@@ -179,12 +186,42 @@ class GoogleHomeProxyCoordinator:
                         dev.device_name,
                         dev.ip_address,
                     )
+                elif dev.device_id in self._ipv4_cache:
+                    ip_address = self._ipv4_cache[dev.device_id]
+                    _LOGGER.info(
+                        "Resolved IPv4 address %s for %s via device ID cache (overriding %s)",
+                        ip_address,
+                        dev.device_name,
+                        dev.ip_address,
+                    )
+                elif target_name in self._ipv4_cache:
+                    ip_address = self._ipv4_cache[target_name]
+                    _LOGGER.info(
+                        "Resolved IPv4 address %s for %s via name cache (overriding %s)",
+                        ip_address,
+                        dev.device_name,
+                        dev.ip_address,
+                    )
+                elif unique_id and unique_id.lower() in self._ipv4_cache:
+                    ip_address = self._ipv4_cache[unique_id.lower()]
+                    _LOGGER.info(
+                        "Resolved IPv4 address %s for %s via unique ID cache (overriding %s)",
+                        ip_address,
+                        dev.device_name,
+                        dev.ip_address,
+                    )
                 else:
                     _LOGGER.warning(
                         "Could not resolve IPv4 for %s; retaining address %s",
                         dev.device_name,
                         dev.ip_address,
                     )
+
+            if is_valid_ipv4(ip_address):
+                self._ipv4_cache[dev.device_id] = ip_address
+                self._ipv4_cache[target_name] = ip_address
+                if unique_id:
+                    self._ipv4_cache[unique_id.lower()] = ip_address
 
             node = SpeakerNode(
                 device_id=dev.device_id,
@@ -207,5 +244,8 @@ class GoogleHomeProxyCoordinator:
             if spk.device_id == speaker.device_id:
                 speaker.auth_token = spk.auth_token
                 speaker.ip_address = spk.ip_address
+                if is_valid_ipv4(spk.ip_address):
+                    self._ipv4_cache[speaker.device_id] = spk.ip_address
+                    self._ipv4_cache[speaker.name.strip().lower()] = spk.ip_address
                 return spk.auth_token
         return None
