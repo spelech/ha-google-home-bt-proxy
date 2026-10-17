@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from glocaltokens.client import GLocalAuthenticationTokens
 from zeroconf import ServiceBrowser, Zeroconf
@@ -94,6 +94,20 @@ def resolve_cast_ipv4_map(
     return ipv4_by_id, ipv4_by_name
 
 
+class _NonClosingZeroconfProxy:
+    """Zeroconf proxy that suppresses close() to protect Home Assistant's shared instance."""
+
+    def __init__(self, zc: Any) -> None:
+        self._zc = zc
+
+    def close(self) -> None:
+        """Ignore upstream close call to prevent closing Home Assistant's shared Zeroconf."""
+        pass
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._zc, name)
+
+
 class GoogleHomeProxyCoordinator:
     """Manages glocaltokens client, discovery, and token renewals."""
 
@@ -131,8 +145,11 @@ class GoogleHomeProxyCoordinator:
 
         def _fetch_devices():
             ipv4_by_id, ipv4_by_name = resolve_cast_ipv4_map(self._zeroconf)
+            proxy_zc = (
+                _NonClosingZeroconfProxy(self._zeroconf) if self._zeroconf is not None else None
+            )
             raw = self._client.get_google_devices(
-                zeroconf_instance=None,
+                zeroconf_instance=proxy_zc,
                 force_homegraph_reload=force_reload,
             )
             return raw, ipv4_by_id, ipv4_by_name

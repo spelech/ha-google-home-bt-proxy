@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-10-16
+
+### Fixed
+- **Home Assistant Shared Zeroconf Lifecycle Isolation**:
+  - Implemented `_NonClosingZeroconfProxy` wrapping the Home Assistant shared `Zeroconf` instance passed to `glocaltokens.get_google_devices()`.
+  - Suppressed upstream `service_browser.zc.close()` calls from terminating Home Assistant's shared Zeroconf socket.
+  - Eliminated the Home Assistant helper frame warning (`Detected that custom integration 'google_home_bt_proxy' attempted to create another Zeroconf instance`).
+
 ## [1.5.1] - 2026-10-16
 
 ### Fixed
