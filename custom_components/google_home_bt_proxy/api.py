@@ -17,7 +17,13 @@ from .const import (
     HEADER_LOCAL_AUTH,
     PORT_HTTPS,
 )
-from .models import DiscoveredDevice, SpeakerNode, format_or_derive_mac, is_valid_mac
+from .models import (
+    DiscoveredDevice,
+    SpeakerNode,
+    format_or_derive_mac,
+    is_valid_ipv4,
+    is_valid_mac,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -207,6 +213,8 @@ class GoogleHomeApiClient:
                             speaker.mac_address = format_or_derive_mac(
                                 speaker.device_id, extracted_mac
                             )
+                        if (eureka_ip := data.get("ip_address")) and is_valid_ipv4(str(eureka_ip)):
+                            speaker.ip_address = str(eureka_ip)
                     return data if isinstance(data, dict) else {}
                 return {}
         except (aiohttp.ClientError, TimeoutError) as err:

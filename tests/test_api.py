@@ -212,6 +212,38 @@ async def test_get_device_info_success_and_non_200(aiohttp_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_device_info_updates_speaker_ipv4(aiohttp_client) -> None:
+    """Verify get_device_info canonicalizes speaker.ip_address on valid IPv4 in eureka payload."""
+
+    async def handle_eureka(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "name": "Master Bedroom speaker",
+                "ip_address": "10.0.0.114",
+                "mac_address": "F8:0F:F9:40:17:A6",
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/setup/eureka_info", handle_eureka)
+
+    client = await aiohttp_client(app)
+    api_client = GoogleHomeApiClient(client.session, port=client.server.port, use_ssl=False)
+
+    speaker = SpeakerNode(
+        device_id="test-spk",
+        name="Master Bedroom speaker",
+        ip_address=str(client.server.host),
+        auth_token="test-token",
+    )
+
+    info = await api_client.get_device_info(speaker)
+    assert info.get("name") == "Master Bedroom speaker"
+    assert speaker.ip_address == "10.0.0.114"
+    assert speaker.mac_address == "F8:0F:F9:40:17:A6"
+
+
+@pytest.mark.asyncio
 async def test_get_device_info_non_200(aiohttp_client) -> None:
     """Verify get_device_info returns empty dict on non-200."""
 
