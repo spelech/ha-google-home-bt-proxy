@@ -436,3 +436,58 @@ async def test_coordinator_resolves_ipv4_from_cache_fallback():
 
     assert len(speakers) == 1
     assert speakers[0].ip_address == "10.0.0.110"
+
+
+def test_non_closing_zeroconf_proxy():
+    """Verify _NonClosingZeroconfProxy delegates attributes but ignores close()."""
+    from custom_components.google_home_bt_proxy.coordinator import _NonClosingZeroconfProxy
+
+    mock_zc = MagicMock()
+    mock_zc.some_attr = "hello"
+    mock_zc.close = MagicMock()
+
+    proxy = _NonClosingZeroconfProxy(mock_zc)
+    assert proxy.some_attr == "hello"
+
+    proxy.close()
+    mock_zc.close.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_coordinator_passes_proxy_zeroconf_to_glocaltokens():
+    """Verify coordinator passes a _NonClosingZeroconfProxy into get_google_devices."""
+    from custom_components.google_home_bt_proxy.coordinator import _NonClosingZeroconfProxy
+
+    mock_hass = MagicMock()
+
+    async def run_sync(func):
+        return func()
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=run_sync)
+    mock_zc = MagicMock()
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        master_token="test-master-token",
+        zeroconf_instance=mock_zc,
+    )
+    captured_zc = None
+
+    def fake_get_google_devices(**kwargs):
+        nonlocal captured_zc
+        captured_zc = kwargs.get("zeroconf_instance")
+        return []
+
+    coordinator._client.get_google_devices = MagicMock(side_effect=fake_get_google_devices)
+
+    from unittest.mock import patch
+
+    with patch(
+        "custom_components.google_home_bt_proxy.coordinator.resolve_cast_ipv4_map",
+        return_value=({}, {}),
+    ):
+        await coordinator.async_get_speakers()
+
+    assert captured_zc is not None
+    assert isinstance(captured_zc, _NonClosingZeroconfProxy)
+    assert captured_zc._zc is mock_zc
