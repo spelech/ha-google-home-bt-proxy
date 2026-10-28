@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Google Home Authentication",
-        "description": "Authenticate with the Google account that manages your Google Home / Nest speakers.\n\nTo retrieve your setup token in ~30 seconds:\n1. Open [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup) in a desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `https://accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For step-by-step screenshots, see the [Authentication Guide](https://github.com/spelech/ha-google-home-bt-proxy/blob/main/docs/authentication_guide.md).*",
+        "description": "Authenticate with the Google account that manages your Google Home / Nest speakers.\n\nTo retrieve your setup token in ~30 seconds:\n1. Open **accounts.google.com/EmbeddedSetup** in a desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For step-by-step screenshots, see the **Authentication Guide**.*",
         "data": {
           "username": "Google Account Email",
           "master_token": "OAuth Token or Master Token"
@@ -15,7 +15,7 @@
       },
       "token": {
         "title": "Google Account Token",
-        "description": "To complete setup, retrieve your one-time setup token from your browser:\n1. Open [accounts.google.com/EmbeddedSetup](https://accounts.google.com/EmbeddedSetup) in your desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `https://accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For visual screenshots, see the [Authentication Guide](https://github.com/spelech/ha-google-home-bt-proxy/blob/main/docs/authentication_guide.md).*",
+        "description": "To complete setup, retrieve your one-time setup token from your browser:\n1. Open **accounts.google.com/EmbeddedSetup** in your desktop browser, sign in, and click **'I agree'**.\n2. Press **F12** > **Application** tab (or **Storage** in Firefox) > **Cookies** > `accounts.google.com`.\n3. Copy the **`oauth_token`** cookie value (`oauth2_4/...`) and paste it below (you can close the browser tab after copying).\n\n*(You can paste raw strings like `oauth_token:\"oauth2_4/...\"` directly; formatting and invisible characters are cleaned automatically).* \n\n*For visual screenshots, see the **Authentication Guide**.*",
         "data": {
           "username": "Google Account Email",
           "master_token": "OAuth Token or Master Token"
@@ -38,7 +38,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Google authentication servers.",
-      "invalid_auth": "Authentication failed or token expired. Please ensure you copied the fresh 'oauth_token' cookie from https://accounts.google.com/EmbeddedSetup (starts with oauth2_4/...) after clicking 'I agree'."
+      "invalid_auth": "Authentication failed or token expired. Please ensure you copied the fresh 'oauth_token' cookie from accounts.google.com/EmbeddedSetup (starts with oauth2_4/...) after clicking 'I agree'."
     }
   },
   "options": {
@@ -93,7 +93,6 @@
       "signal_processing": {
         "title": "Signal Processing & RF",
         "description": "{bermuda_notice}",
-        "bermuda_notice": "Bermuda Optimization Mode is active. Signal smoothing, hardware RSSI offsets, and distance modeling are managed natively by Bermuda to preserve peak velocity tracking. To configure antenna offsets, use Bermuda's Configure Scanner Offsets menu.",
         "data": {
           "rssi_offset": "RSSI Calibration Offset (dBm, -30 to +30)",
           "enable_rssi_smoothing": "Enable RSSI Signal Smoothing",
