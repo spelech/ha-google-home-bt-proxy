@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090D16" />
+      <stop offset="55%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#0B1120" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#38BDF8" />
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#1E293B" stroke-width="1" stroke-opacity="0.6" />
+    </pattern>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)" />
+  <rect width="1280" height="640" fill="url(#grid)" />
+  <rect x="0" y="0" width="1280" height="10" fill="url(#accent)" />
+  <rect x="40" y="40" width="1200" height="560" rx="24" fill="#0B1324" fill-opacity="0.78" stroke="#1E293B" stroke-width="2" />
+
+  <!-- Top Domain Header -->
+  <text x="80" y="114" fill="#34D399" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="20" font-weight="700" letter-spacing="3">HOME ASSISTANT &amp; SMART HOME AUTOMATION</text>
+
+  <!-- Repo Owner & Title -->
+  <text x="80" y="190" fill="#64748B" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="32" font-weight="500">spelech /</text>
+  <text x="80" y="264" fill="#F8FAFC" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="50" font-weight="800" letter-spacing="-1">ha-google-home-bt-proxy</text>
+
+  <!-- Description -->
+  <text x="80" y="336" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="400">Home Assistant custom integration turning Google Home and</text>
+<text x="80" y="378" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="400">Nest smart speakers into active Bluetooth proxies for device</text>
+<text x="80" y="420" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="400">tracking.</text>
+
+  <!-- Topic & Language Pills -->
+  <g transform="translate(80, 498)"><rect width="120" height="46" rx="10" fill="#1E293B" stroke="#38BDF8" stroke-width="1.5" stroke-opacity="0.65" /><text x="60" y="30" text-anchor="middle" fill="#E2E8F0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">v1.5.2</text></g><g transform="translate(216, 498)"><rect width="120" height="46" rx="10" fill="#1E293B" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.65" /><text x="60" y="30" text-anchor="middle" fill="#E2E8F0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">Python</text></g><g transform="translate(352, 498)"><rect width="106" height="46" rx="10" fill="#1E293B" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.65" /><text x="53" y="30" text-anchor="middle" fill="#E2E8F0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">#ble</text></g><g transform="translate(474, 498)"><rect width="176" height="46" rx="10" fill="#1E293B" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.65" /><text x="88" y="30" text-anchor="middle" fill="#E2E8F0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">#bluetooth</text></g><g transform="translate(666, 498)"><rect width="260" height="46" rx="10" fill="#1E293B" stroke="#34D399" stroke-width="1.5" stroke-opacity="0.65" /><text x="130" y="30" text-anchor="middle" fill="#E2E8F0" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">#bluetooth-proxy</text></g>
+
+  <!-- Bottom Right Branding -->
+  <text x="1195" y="530" text-anchor="end" fill="#64748B" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="600">github.com/spelech/ha-google-home-bt-proxy</text>
+</svg>
