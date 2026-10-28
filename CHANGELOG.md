@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3](https://github.com/spelech/ha-google-home-bt-proxy/compare/v1.5.2...v1.5.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **translations:** comply with Hassfest translation schema and URL placeholder rules ([b83f41e](https://github.com/spelech/ha-google-home-bt-proxy/commit/b83f41e2b3f3e21c38533818bf6b45b3c1bbaf09))
+
+
+### Documentation
+
+* add custom 1280x640 social preview card (.github/social-preview.svg) ([d75137d](https://github.com/spelech/ha-google-home-bt-proxy/commit/d75137df58842db9b35fad1237da976c4dcde47f))
+* add HACS/Hassfest validation badge and 1-click Open in HACS button ([76c8cfe](https://github.com/spelech/ha-google-home-bt-proxy/commit/76c8cfeb72462f9d9b622f7f6e420f545fa67044))
+
 ## [1.5.2] - 2026-10-16
 
 ### Fixed
