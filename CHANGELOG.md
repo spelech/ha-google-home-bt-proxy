@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-11-14
+
+### Added
+- **In-Place Re-Authentication and Reconfiguration Flow (`reauth` / `reconfigure`)**:
+  - Added `async_step_reauth`, `async_step_reauth_confirm`, and `async_step_reconfigure` in `config_flow.py` using `async_update_reload_and_abort` so expired or invalidated Google tokens (e.g., after a password change) can be rotated in place without deleting the integration or losing `known_irks`, speaker overrides, and entity IDs.
+  - Added `GoogleAuthError` detection in `coordinator.py` (with compatibility handling across `glocaltokens` versions) and raised `ConfigEntryAuthFailed` from `async_setup_entry` so Home Assistant surfaces the **Re-authenticate** button automatically on auth failures.
+  - Added runtime `GoogleAuthError` handling in `_speaker_scan_loop` to mark status as `auth_failed`, trigger `entry.async_start_reauth(hass)`, and pause retries until re-authentication reloads the entry.
+  - Added `reauth_confirm`, `reconfigure`, and `abort` localization strings in `strings.json` and `translations/en.json`.
+
 ## [1.5.2] - 2026-10-16
 
 ### Fixed

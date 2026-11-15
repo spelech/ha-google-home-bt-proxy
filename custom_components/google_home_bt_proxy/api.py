@@ -40,6 +40,10 @@ class SpeakerUnsupportedError(Exception):
     """Raised when the device returns HTTP 404 (Bluetooth scan API not implemented)."""
 
 
+class GoogleAuthError(Exception):
+    """Raised when Google account authentication fails (e.g. BadAuthentication)."""
+
+
 class GoogleHomeApiClient:
     """Client for local Google Home API requests."""
 

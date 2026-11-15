@@ -849,3 +849,232 @@ async def test_options_flow_cache_interpolation():
     assert spk_save["type"] == "create_entry"
     overrides = spk_save["data"][CONF_SPEAKER_OVERRIDES]
     assert overrides["spk-kitchen"][CONF_CACHE_INTERPOLATION] is True
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reauth_success_preserves_options():
+    """Test reauth flow updates credentials in-place and preserves entry options."""
+    from types import MappingProxyType
+
+    from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER, ConfigEntry
+
+    from custom_components.google_home_bt_proxy.const import CONF_KNOWN_IRKS
+
+    repo_root = str(pathlib.Path(__file__).parent.parent)
+    hass = HomeAssistant(repo_root)
+    async_setup_loader(hass)
+    hass.config_entries = ConfigEntries(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Google Home Bluetooth Proxy",
+        data={
+            CONF_USERNAME: "user@gmail.com",
+            CONF_MASTER_TOKEN: "aas_et/expired_token",
+            CONF_ANDROID_ID: "preserved-aid-123",
+            CONF_PASSWORD: "legacy-password",
+        },
+        options={CONF_KNOWN_IRKS: "deadbeef00112233445566778899aabb Phone"},
+        source=SOURCE_USER,
+        unique_id="bt-proxy-unique",
+        discovery_keys=MappingProxyType({}),
+        subentries_data=None,
+    )
+    with patch.object(hass.config_entries, "async_setup", return_value=True):
+        await hass.config_entries.async_add(entry)
+
+    with (
+        patch("homeassistant.config_entries.async_process_deps_reqs", AsyncMock(return_value=True)),
+        patch.object(
+            hass.config_entries, "async_schedule_reload", return_value=True
+        ) as mock_reload,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+        assert result["description_placeholders"]["username"] == "user@gmail.com"
+
+        with patch(
+            "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+            return_value={"Token": "aas_et/fresh_master_token"},
+        ) as mock_exchange:
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_USERNAME: "user@gmail.com",
+                    CONF_MASTER_TOKEN: "oauth2_4/new_oauth_cookie",
+                },
+            )
+
+        assert result2["type"] == FlowResultType.ABORT
+        assert result2["reason"] == "reauth_successful"
+        mock_exchange.assert_called_once_with(
+            "user@gmail.com", "oauth2_4/new_oauth_cookie", "preserved-aid-123"
+        )
+        mock_reload.assert_called_once_with(entry.entry_id)
+
+    assert entry.data[CONF_MASTER_TOKEN] == "aas_et/fresh_master_token"
+    assert entry.data[CONF_ANDROID_ID] == "preserved-aid-123"
+    assert CONF_PASSWORD not in entry.data
+    assert CONF_OAUTH_TOKEN not in entry.data
+    assert entry.options[CONF_KNOWN_IRKS] == "deadbeef00112233445566778899aabb Phone"
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reauth_errors_and_recovery():
+    """Test reauth form surfaces invalid_auth and cannot_connect cleanly."""
+    from types import MappingProxyType
+
+    from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER, ConfigEntry
+
+    repo_root = str(pathlib.Path(__file__).parent.parent)
+    hass = HomeAssistant(repo_root)
+    async_setup_loader(hass)
+    hass.config_entries = ConfigEntries(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Google Home Bluetooth Proxy",
+        data={
+            CONF_USERNAME: "user@gmail.com",
+            CONF_MASTER_TOKEN: "aas_et/expired_token",
+            CONF_ANDROID_ID: "preserved-aid-123",
+        },
+        options={},
+        source=SOURCE_USER,
+        unique_id=None,
+        discovery_keys=MappingProxyType({}),
+        subentries_data=None,
+    )
+    with patch.object(hass.config_entries, "async_setup", return_value=True):
+        await hass.config_entries.async_add(entry)
+
+    with (
+        patch("homeassistant.config_entries.async_process_deps_reqs", AsyncMock(return_value=True)),
+        patch.object(hass.config_entries, "async_schedule_reload", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_REAUTH, "entry_id": entry.entry_id},
+            data=entry.data,
+        )
+        assert result["step_id"] == "reauth_confirm"
+
+        with patch(
+            "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+            return_value={"Error": "BadAuthentication"},
+        ):
+            bad_res = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_USERNAME: "user@gmail.com",
+                    CONF_MASTER_TOKEN: "oauth2_4/bad_cookie",
+                },
+            )
+        assert bad_res["type"] == FlowResultType.FORM
+        assert bad_res["step_id"] == "reauth_confirm"
+        assert bad_res["errors"] == {"base": "invalid_auth"}
+
+        with patch(
+            "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+            side_effect=RuntimeError("network error"),
+        ):
+            err_res = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_USERNAME: "user@gmail.com",
+                    CONF_MASTER_TOKEN: "oauth2_4/temp_error_cookie",
+                },
+            )
+        assert err_res["type"] == FlowResultType.FORM
+        assert err_res["step_id"] == "reauth_confirm"
+        assert err_res["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
+async def test_config_flow_reconfigure_success_and_invalid_auth():
+    """Test reconfigure flow allows in-place credential rotation without deleting entry."""
+    from types import MappingProxyType
+
+    from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER, ConfigEntry
+
+    from custom_components.google_home_bt_proxy.const import CONF_KNOWN_IRKS
+
+    repo_root = str(pathlib.Path(__file__).parent.parent)
+    hass = HomeAssistant(repo_root)
+    async_setup_loader(hass)
+    hass.config_entries = ConfigEntries(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Google Home Bluetooth Proxy",
+        data={
+            CONF_USERNAME: "user@gmail.com",
+            CONF_MASTER_TOKEN: "aas_et/old_token",
+            CONF_ANDROID_ID: "aid-reconfig",
+        },
+        options={CONF_KNOWN_IRKS: "11223344556677889900aabbccddeeff Watch"},
+        source=SOURCE_USER,
+        unique_id=None,
+        discovery_keys=MappingProxyType({}),
+        subentries_data=None,
+    )
+    with patch.object(hass.config_entries, "async_setup", return_value=True):
+        await hass.config_entries.async_add(entry)
+
+    with (
+        patch("homeassistant.config_entries.async_process_deps_reqs", AsyncMock(return_value=True)),
+        patch.object(
+            hass.config_entries, "async_schedule_reload", return_value=True
+        ) as mock_reload,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "reconfigure"
+
+        with patch(
+            "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+            return_value={"Error": "BadAuthentication"},
+        ):
+            bad_res = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_USERNAME: "user@gmail.com",
+                    CONF_MASTER_TOKEN: "oauth2_4/bad_cookie",
+                },
+            )
+        assert bad_res["type"] == FlowResultType.FORM
+        assert bad_res["errors"] == {"base": "invalid_auth"}
+
+        with patch(
+            "custom_components.google_home_bt_proxy.config_flow.gpsoauth.exchange_token",
+            return_value={"Token": "aas_et/rotated_token"},
+        ):
+            ok_res = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_USERNAME: "user@gmail.com",
+                    CONF_MASTER_TOKEN: "oauth2_4/good_cookie",
+                },
+            )
+
+        assert ok_res["type"] == FlowResultType.ABORT
+        assert ok_res["reason"] == "reconfigure_successful"
+        mock_reload.assert_called_once_with(entry.entry_id)
+
+    assert entry.data[CONF_MASTER_TOKEN] == "aas_et/rotated_token"
+    assert entry.data[CONF_ANDROID_ID] == "aid-reconfig"
+    assert entry.options[CONF_KNOWN_IRKS] == "11223344556677889900aabbccddeeff Watch"

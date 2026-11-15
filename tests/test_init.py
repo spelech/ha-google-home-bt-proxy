@@ -1086,3 +1086,86 @@ async def test_speaker_scan_loop_cache_interpolation_aborts_on_tts():
     # Virtual cycle aborted to tts_paused and did not replay cached result
     assert mock_scanner.process_scan_results.call_count == 1
     assert state.status == "tts_paused"
+
+
+@pytest.mark.asyncio
+async def test_async_setup_entry_auth_failed():
+    """GoogleAuthError during setup raises ConfigEntryAuthFailed to trigger HA reauth."""
+    from homeassistant.exceptions import ConfigEntryAuthFailed
+
+    from custom_components.google_home_bt_proxy.api import GoogleAuthError
+
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "test-entry-auth-fail"
+    mock_entry.data = {
+        CONF_USERNAME: "user@gmail.com",
+        CONF_MASTER_TOKEN: "aas_et/expired",
+        CONF_ANDROID_ID: "aid",
+    }
+    mock_entry.options = {}
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch("custom_components.google_home_bt_proxy.zeroconf.async_get_instance", AsyncMock()),
+        patch(
+            "custom_components.google_home_bt_proxy.GoogleHomeProxyCoordinator"
+        ) as mock_coord_cls,
+    ):
+        coord_inst = mock_coord_cls.return_value
+        coord_inst.async_get_speakers = AsyncMock(side_effect=GoogleAuthError("BadAuthentication"))
+
+        with pytest.raises(ConfigEntryAuthFailed):
+            await async_setup_entry(mock_hass, mock_entry)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_google_auth_error_triggers_reauth():
+    """GoogleAuthError during runtime refresh sets auth_failed and starts HA reauth."""
+    from custom_components.google_home_bt_proxy.api import GoogleAuthError
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {}
+    mock_entry.async_start_reauth = MagicMock()
+
+    mock_coord = MagicMock()
+    mock_coord.async_refresh_token = AsyncMock(side_effect=GoogleAuthError("BadAuthentication"))
+
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(side_effect=TokenExpiredError("Token expired"))
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-auth-err",
+        name="Kitchen",
+        ip_address="192.168.1.101",
+        auth_token="old-token",
+    )
+    mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    state = SpeakerProxyState()
+
+    state.trigger_scan_event.wait = AsyncMock(side_effect=asyncio.CancelledError())
+    with pytest.raises(asyncio.CancelledError):
+        await _speaker_scan_loop(
+            mock_hass,
+            mock_entry,
+            mock_coord,
+            mock_api,
+            mock_speaker,
+            mock_scanner,
+            initial_delay=0.0,
+            playback_detector=mock_detector,
+            state=state,
+        )
+
+    assert state.status == "auth_failed"
+    assert mock_speaker.available is False
+    mock_entry.async_start_reauth.assert_called_once_with(mock_hass)
