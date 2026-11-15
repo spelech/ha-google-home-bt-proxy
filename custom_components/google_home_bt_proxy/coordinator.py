@@ -9,7 +9,15 @@ from typing import TYPE_CHECKING, Any
 from glocaltokens.client import GLocalAuthenticationTokens
 from zeroconf import ServiceBrowser, Zeroconf
 
+from .api import GoogleAuthError
 from .models import SpeakerNode, is_valid_ipv4
+
+try:
+    from glocaltokens.exceptions import (  # type: ignore[import-not-found]
+        AuthenticationError as GLocalAuthenticationError,
+    )
+except ImportError:  # glocaltokens versions prior to exception classes
+    GLocalAuthenticationError = None  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -108,6 +116,16 @@ class _NonClosingZeroconfProxy:
         return getattr(self._zc, name)
 
 
+def _is_glocal_auth_error(err: Exception) -> bool:
+    """Return True if an exception represents a Google authentication failure."""
+    if GLocalAuthenticationError is not None and isinstance(err, GLocalAuthenticationError):
+        return True
+    if type(err).__name__ == "AuthenticationError":
+        return True
+    msg = str(err)
+    return "BadAuthentication" in msg or "Google gave no access token" in msg
+
+
 class GoogleHomeProxyCoordinator:
     """Manages glocaltokens client, discovery, and token renewals."""
 
@@ -148,10 +166,17 @@ class GoogleHomeProxyCoordinator:
             proxy_zc = (
                 _NonClosingZeroconfProxy(self._zeroconf) if self._zeroconf is not None else None
             )
-            raw = self._client.get_google_devices(
-                zeroconf_instance=proxy_zc,
-                force_homegraph_reload=force_reload,
-            )
+            try:
+                raw = self._client.get_google_devices(
+                    zeroconf_instance=proxy_zc,
+                    force_homegraph_reload=force_reload,
+                )
+            except Exception as err:
+                if _is_glocal_auth_error(err):
+                    raise GoogleAuthError(
+                        "Google account authentication failed; re-authentication required"
+                    ) from err
+                raise
             return raw, ipv4_by_id, ipv4_by_name
 
         job_result = await self.hass.async_add_executor_job(_fetch_devices)

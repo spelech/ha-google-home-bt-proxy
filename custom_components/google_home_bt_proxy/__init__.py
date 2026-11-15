@@ -12,11 +12,13 @@ from homeassistant.components import bluetooth, zeroconf
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import (
+    GoogleAuthError,
     GoogleHomeApiClient,
     SpeakerConnectionError,
     SpeakerUnsupportedError,
@@ -124,7 +126,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     api_client = GoogleHomeApiClient(session=session)
     playback_detector = SpeakerPlaybackDetector(api_client=api_client, hass=hass)
-    speakers = await coordinator.async_get_speakers()
+    try:
+        speakers = await coordinator.async_get_speakers()
+    except GoogleAuthError as err:
+        raise ConfigEntryAuthFailed(
+            "Google Home authentication failed. Please re-authenticate."
+        ) from err
 
     disabled_speakers: list[str] = entry.options.get(CONF_DISABLED_SPEAKERS, [])
     active_speakers = [s for s in speakers if s.device_id not in disabled_speakers]
@@ -501,6 +508,33 @@ def _get_speaker_setting(
     if key in overrides and overrides[key] is not None:
         return overrides[key]
     return entry.options.get(key, default)
+
+
+async def _handle_google_auth_failure(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    speaker: SpeakerNode,
+    state: SpeakerProxyState,
+    err: GoogleAuthError,
+) -> None:
+    """Pause speaker worker and trigger Home Assistant re-authentication flow."""
+    _LOGGER.error(
+        "Google authentication failed while refreshing tokens for %s: %s. "
+        "Triggering re-authentication flow.",
+        speaker.name,
+        err,
+    )
+    state.status = "auth_failed"
+    state.notify_callbacks()
+    speaker.available = False
+    if hasattr(entry, "async_start_reauth"):
+        entry.async_start_reauth(hass)
+    state.trigger_scan_event.clear()
+    try:
+        await asyncio.wait_for(state.trigger_scan_event.wait(), timeout=3600.0)
+    except TimeoutError:
+        pass
+    state.trigger_scan_event.clear()
 
 
 async def _speaker_scan_loop(
@@ -908,7 +942,11 @@ async def _speaker_scan_loop(
                 last_scan_results = None
                 cached_cycle_pending = False
                 _LOGGER.warning("Auth token expired for %s, requesting refresh...", speaker.name)
-                await coordinator.async_refresh_token(speaker)
+                try:
+                    await coordinator.async_refresh_token(speaker)
+                except GoogleAuthError as auth_err:
+                    await _handle_google_auth_failure(hass, entry, speaker, state, auth_err)
+                    continue
                 await asyncio.sleep(2.0)
                 continue
             except SpeakerUnsupportedError as err:
@@ -958,6 +996,9 @@ async def _speaker_scan_loop(
                 _LOGGER.info("Attempting to revive scan worker for %s...", speaker.name)
                 try:
                     await coordinator.async_refresh_token(speaker)
+                except GoogleAuthError as auth_err:
+                    await _handle_google_auth_failure(hass, entry, speaker, state, auth_err)
+                    continue
                 except Exception as refresh_err:
                     _LOGGER.debug(
                         "Error refreshing token on revival for %s: %s",
@@ -982,7 +1023,11 @@ async def _speaker_scan_loop(
                         speaker.name,
                         speaker.ip_address,
                     )
-                    await coordinator.async_refresh_token(speaker)
+                    try:
+                        await coordinator.async_refresh_token(speaker)
+                    except GoogleAuthError as auth_err:
+                        await _handle_google_auth_failure(hass, entry, speaker, state, auth_err)
+                        continue
                     if is_valid_ipv4(speaker.ip_address):
                         _LOGGER.info(
                             "Recovered IPv4 address %s for %s",

@@ -251,6 +251,79 @@ class GoogleHomeBtProxyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self._show_config_form(errors=errors)
         return await self.async_step_user(user_input)
 
+    async def _async_handle_credential_update(
+        self,
+        entry: config_entries.ConfigEntry,
+        step_id: str,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Validate updated credentials and reload the existing config entry in place."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            user_input.pop(CONF_PASSWORD, None)
+            self._email = clean_string(user_input.get(CONF_USERNAME, ""))
+            if CONF_ANDROID_ID not in user_input and entry.data.get(CONF_ANDROID_ID):
+                user_input[CONF_ANDROID_ID] = entry.data[CONF_ANDROID_ID]
+            try:
+                valid = await self._validate_credentials(user_input)
+                if valid:
+                    updated_data = {
+                        **{
+                            k: v
+                            for k, v in entry.data.items()
+                            if k not in (CONF_PASSWORD, CONF_OAUTH_TOKEN)
+                        },
+                        **user_input,
+                    }
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data=updated_data,
+                    )
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during %s flow", step_id)
+                errors["base"] = "cannot_connect"
+
+        default_username = self._email or clean_string(entry.data.get(CONF_USERNAME, ""))
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_USERNAME, default=default_username): str,
+                vol.Required(CONF_MASTER_TOKEN): str,
+            }
+        )
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=schema,
+            description_placeholders={"username": default_username or "Google Home"},
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """Perform reauthentication upon an API authentication error."""
+        self._email = clean_string(entry_data.get(CONF_USERNAME, ""))
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Dialog that informs the user that reauthentication is required."""
+        return await self._async_handle_credential_update(
+            self._get_reauth_entry(),
+            "reauth_confirm",
+            user_input,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Allow reconfiguring Google credentials without removing the entry."""
+        return await self._async_handle_credential_update(
+            self._get_reconfigure_entry(),
+            "reconfigure",
+            user_input,
+        )
+
     async def async_step_import_existing(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

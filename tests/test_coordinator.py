@@ -491,3 +491,81 @@ async def test_coordinator_passes_proxy_zeroconf_to_glocaltokens():
     assert captured_zc is not None
     assert isinstance(captured_zc, _NonClosingZeroconfProxy)
     assert captured_zc._zc is mock_zc
+
+
+@pytest.mark.asyncio
+async def test_coordinator_get_speakers_auth_error():
+    """AuthenticationError from glocaltokens is converted into GoogleAuthError."""
+    from unittest.mock import patch
+
+    from custom_components.google_home_bt_proxy.api import GoogleAuthError
+
+    class AuthenticationError(Exception):
+        pass
+
+    mock_hass = MagicMock()
+
+    async def _run_in_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_run_in_executor)
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        username="user@gmail.com",
+        master_token="aas_et/expired",
+        android_id="test-android-id",
+    )
+    coordinator._client.get_google_devices = MagicMock(
+        side_effect=AuthenticationError("Google gave no access token: BadAuthentication")
+    )
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.coordinator.resolve_cast_ipv4_map",
+            return_value=({}, {}),
+        ),
+        pytest.raises(GoogleAuthError),
+    ):
+        await coordinator.async_get_speakers()
+
+
+@pytest.mark.asyncio
+async def test_coordinator_refresh_token_propagates_google_auth_error():
+    """Runtime refresh raises GoogleAuthError on BadAuthentication strings."""
+    from unittest.mock import patch
+
+    from custom_components.google_home_bt_proxy.api import GoogleAuthError
+
+    mock_hass = MagicMock()
+
+    async def _run_in_executor(func, *args):
+        return func(*args)
+
+    mock_hass.async_add_executor_job = AsyncMock(side_effect=_run_in_executor)
+
+    coordinator = GoogleHomeProxyCoordinator(
+        hass=mock_hass,
+        username="user@gmail.com",
+        master_token="aas_et/expired",
+        android_id="test-android-id",
+    )
+    coordinator._client.get_google_devices = MagicMock(
+        side_effect=RuntimeError("BadAuthentication")
+    )
+
+    speaker = SpeakerNode(
+        device_id="spk-1",
+        name="Living Room Speaker",
+        ip_address="192.168.1.10",
+        auth_token="old-token",
+    )
+
+    with (
+        patch(
+            "custom_components.google_home_bt_proxy.coordinator.resolve_cast_ipv4_map",
+            return_value=({}, {}),
+        ),
+        pytest.raises(GoogleAuthError),
+    ):
+        await coordinator.async_refresh_token(speaker)
