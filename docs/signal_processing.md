@@ -101,9 +101,9 @@ To prevent unknown or rotating addresses from flooding Home Assistant, three fil
 
 ## 5. Scan Orchestration
 
-Google Home and Nest speakers share their 2.4GHz antenna between Wi-Fi and Bluetooth. Running scans on several speakers simultaneously can increase packet loss on both networks.
+Google Home and Nest speakers share their 2.4GHz antenna between Wi-Fi and Bluetooth. Running scans on several speakers simultaneously can increase packet loss on both networks, while strictly serializing large speaker fleets would cause per-speaker refresh intervals to exceed Bermuda BLE Trilateration's 10-second advertisement age limit (`AREA_MAX_AD_AGE = 10s`).
 
 The scan orchestrator manages inquiry timing across speakers:
 
-- **Round-Robin (`round_robin`, Default)**: Only one speaker scans at a time. Other speakers wait in a queue until the active scan finishes. While waiting, the speaker sensor reports `status: waiting_slot`.
+- **Adaptive Round-Robin (`round_robin`, Default)**: Coordinates speakers in a FIFO queue and automatically scales concurrent scan slots $K = \max\left(1, \left\lceil \frac{N \times T_{\text{scan}}}{T_{\text{scan}} + T_{\text{interval}}} \right\rceil\right)$ based on the active speaker count $N$ (e.g., 1 slot for 1–2 speakers, 2 slots for 3–4 speakers, 3 slots for 5–6 speakers at default 4s/4s timings). This minimizes simultaneous 2.4GHz contention while guaranteeing every speaker completes a real physical scan within its target cycle ($\le 8\text{s}$). While waiting for a slot, the speaker sensor reports `status: waiting_slot`.
 - **Independent (`independent`)**: Each speaker scans on its own schedule without coordinating with others.

@@ -120,7 +120,7 @@ sequenceDiagram
 | **HTTPS API Client** | `api.py` | Sends HTTPS requests to port 8443 with the `cast-local-authorization-token` header. |
 | **Remote Scanner** | `scanner.py` | Implements `habluetooth.BaseHaRemoteScanner` and forwards filtered advertisements to Home Assistant. |
 | **Signal Processor** | `filter.py` | Handles RSSI smoothing (median/EMA), log-distance path loss distance calculation, and MAC filtering. |
-| **Scan Orchestrator** | `orchestrator.py` | Serializes scan execution across speakers in round-robin sequence to reduce 2.4GHz interference. |
+| **Scan Orchestrator** | `orchestrator.py` | Coordinates scan execution across speakers in a FIFO round-robin pool, scaling concurrent slots to keep cycle times within Bermuda's 10s window while minimizing 2.4GHz interference. |
 | **Playback Detector** | `playback.py` | Detects media playback via Cast V2 protocol (port 8009) and Bluetooth A2DP audio (port 8443). |
 | **Configuration Flow** | `config_flow.py` | Manages integration setup and options UI for global settings and per-speaker overrides. |
 | **Entities** | `sensor.py`, `switch.py`, `button.py` | Exposes status and counter sensors, proxy toggle switches, and manual scan trigger buttons. |
@@ -133,7 +133,7 @@ sequenceDiagram
 
 ## 5. Resilience & Fault Tolerance
 
-1. **Staggered Initialization**: Workers start with a 1.5-second stagger delay per speaker to avoid simultaneous network requests at startup.
+1. **Staggered Initialization**: Workers start with an evenly distributed stagger delay across the first scan cycle ($\le 1.5\text{s}$ per speaker) to avoid simultaneous network requests at startup.
 2. **Token Expiration Recovery**: If a speaker returns HTTP 401 Unauthorized, the integration catches `TokenExpiredError`, refreshes the token via `coordinator.async_refresh_token(speaker)`, and retries.
 3. **Exponential Backoff**: Network errors and unreachable speakers trigger exponential backoff (1s, 2s, 4s... up to 60s) to handle speaker reboots and temporary Wi-Fi drops.
 4. **Clean Resource Teardown**: Unloading the integration cancels background worker tasks and unregisters scanners from the Bluetooth system.

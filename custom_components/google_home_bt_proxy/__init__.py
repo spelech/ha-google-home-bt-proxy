@@ -27,7 +27,6 @@ from .api import (
 from .const import (
     CONF_ANDROID_ID,
     CONF_BERMUDA_MODE,
-    CONF_CACHE_INTERPOLATION,
     CONF_DISABLED_SPEAKERS,
     CONF_ENABLE_DISTANCE_ESTIMATION,
     CONF_ENABLE_RSSI_SMOOTHING,
@@ -54,7 +53,6 @@ from .const import (
     CONF_TRACKED_DEVICES,
     CONF_USERNAME,
     DEFAULT_BERMUDA_MODE,
-    DEFAULT_CACHE_INTERPOLATION,
     DEFAULT_ENABLE_DISTANCE_ESTIMATION,
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
@@ -83,7 +81,7 @@ from .const import (
 from .coordinator import GoogleHomeProxyCoordinator, is_valid_ipv4
 from .filter import SignalProcessor
 from .irk import IrkResolver, parse_irk_config
-from .models import DiscoveredDevice, SpeakerNode, SpeakerProxyState, mac_math_offset
+from .models import SpeakerNode, SpeakerProxyState, mac_math_offset
 from .orchestrator import ScanOrchestrator
 from .playback import SpeakerPlaybackDetector
 from .scanner import GoogleHomeRemoteScanner
@@ -148,7 +146,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     irk_resolver = IrkResolver(irk_map) if irk_map else None
 
     orchestrator_mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
-    orchestrator = ScanOrchestrator(mode=orchestrator_mode)
+    global_scan_timeout = entry.options.get(CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT)
+    global_scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    orchestrator = ScanOrchestrator(
+        mode=orchestrator_mode,
+        speaker_count=len(active_speakers),
+        scan_timeout=global_scan_timeout,
+        scan_interval=global_scan_interval,
+    )
 
     scanners: dict[str, GoogleHomeRemoteScanner] = {}
     speakers_data: dict[str, dict[str, Any]] = {}
@@ -168,6 +173,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         getattr(hass, "config_entries", None) and hass.config_entries.async_entries("bermuda")
     )
     default_bermuda = is_bermuda_loaded or DEFAULT_BERMUDA_MODE
+
+    target_cycle = float(global_scan_timeout) + float(global_scan_interval)
+    stagger_step = (
+        min(1.5, target_cycle / len(active_speakers)) if len(active_speakers) > 1 else 1.5
+    )
 
     for index, speaker in enumerate(active_speakers):
         speaker_bermuda_mode = bool(
@@ -326,8 +336,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if assigned_area:
             _sync_bluetooth_scanner_area(device_registry, speaker.mac_address, assigned_area)
 
-        # Stagger worker starts by 1.5 seconds per speaker
-        stagger_delay = index * 1.5
+        # Stagger worker starts evenly within target cycle (capped at 1.5s per speaker)
+        stagger_delay = index * stagger_step
         task = hass.async_create_background_task(
             _speaker_scan_loop(
                 hass,
@@ -563,8 +573,6 @@ async def _speaker_scan_loop(
     backoff = 1.0
     consecutive_unsupported = 0
     continuous_skip_start: float | None = None
-    last_scan_results: list[DiscoveredDevice] | None = None
-    cached_cycle_pending = False
     while True:
         if not state.enabled:
             state.status = "disabled"
@@ -609,11 +617,6 @@ async def _speaker_scan_loop(
         speaker_filter_peer_proxies = bool(
             _get_speaker_setting(
                 entry, speaker.device_id, CONF_FILTER_PEER_PROXIES, DEFAULT_FILTER_PEER_PROXIES
-            )
-        )
-        speaker_cache_interpolation = bool(
-            _get_speaker_setting(
-                entry, speaker.device_id, CONF_CACHE_INTERPOLATION, DEFAULT_CACHE_INTERPOLATION
             )
         )
         scanner.bermuda_mode = speaker_bermuda_mode
@@ -701,6 +704,36 @@ async def _speaker_scan_loop(
             )
 
         orchestrator.mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
+        if hasattr(orchestrator, "update_scaling"):
+            disabled_ids = set(entry.options.get(CONF_DISABLED_SPEAKERS, []))
+            active_count = 0
+            domain_data = getattr(hass, "data", {})
+            entry_runtime = (
+                domain_data.get(DOMAIN, {}).get(getattr(entry, "entry_id", ""), {})
+                if isinstance(domain_data, dict)
+                else {}
+            )
+            runtime_states = (
+                entry_runtime.get("speaker_states") if isinstance(entry_runtime, dict) else None
+            )
+            if isinstance(runtime_states, dict) and runtime_states:
+                active_count = sum(
+                    1
+                    for spk_id, st in runtime_states.items()
+                    if spk_id not in disabled_ids and getattr(st, "enabled", True)
+                )
+            elif isinstance(getattr(coordinator, "speakers", None), dict):
+                active_count = sum(
+                    1
+                    for spk_id, spk in coordinator.speakers.items()
+                    if spk_id not in disabled_ids and getattr(spk, "enabled", True)
+                )
+            if active_count > 0:
+                orchestrator.update_scaling(
+                    speaker_count=active_count,
+                    scan_timeout=entry.options.get(CONF_SCAN_TIMEOUT, DEFAULT_SCAN_TIMEOUT),
+                    scan_interval=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                )
 
         # Check and synchronize area assignments dynamically
         device_reg = dr.async_get(hass)
@@ -741,12 +774,7 @@ async def _speaker_scan_loop(
 
         now = time.monotonic()
 
-        if state.trigger_scan_event.is_set():
-            cached_cycle_pending = False
-
         if is_tts:
-            cached_cycle_pending = False
-            last_scan_results = None
             should_scan = False
             active_interval = idle_scan_interval
             state.status = "tts_paused"
@@ -756,8 +784,6 @@ async def _speaker_scan_loop(
                 continuous_skip_start = now
 
             if playback_mode == MODE_PAUSE:
-                cached_cycle_pending = False
-                last_scan_results = None
                 should_scan = False
                 active_interval = idle_scan_interval
                 state.status = "playback_paused"
@@ -781,8 +807,6 @@ async def _speaker_scan_loop(
                     continuous_skip_start = now
                     state.status = "playback_throttled"
                 else:
-                    cached_cycle_pending = False
-                    last_scan_results = None
                     should_scan = False
                     active_interval = idle_scan_interval
                     state.status = "playback_skipped"
@@ -793,72 +817,7 @@ async def _speaker_scan_loop(
             active_timeout = idle_scan_timeout
             active_interval = idle_scan_interval
 
-        if (
-            should_scan
-            and speaker_cache_interpolation
-            and cached_cycle_pending
-            and last_scan_results is not None
-        ):
-            try:
-                state.status = "interpolating"
-                state.notify_callbacks()
-
-                # Virtual scan duration with abort support
-                state.abort_scan_event.clear()
-                aborted = False
-                if state.abort_scan_event.is_set():
-                    aborted = True
-                else:
-                    sleep_task = asyncio.create_task(asyncio.sleep(active_timeout))
-                    abort_task = asyncio.create_task(state.abort_scan_event.wait())
-                    done, pending = await asyncio.wait(
-                        [sleep_task, abort_task],
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
-                    for t in pending:
-                        t.cancel()
-                    if abort_task in done or state.abort_scan_event.is_set():
-                        aborted = True
-                    else:
-                        await sleep_task
-
-                if aborted:
-                    _LOGGER.info(
-                        "Virtual Bluetooth cycle on %s aborted due to incoming TTS/audio alert",
-                        speaker.name,
-                    )
-                    cached_cycle_pending = False
-                    last_scan_results = None
-                    state.status = "tts_paused"
-                    state.notify_callbacks()
-                    await asyncio.sleep(1.0)
-                    continue
-
-                # Re-inject cached results with fresh timestamps
-                injected = scanner.process_scan_results(last_scan_results, min_rssi=rssi_threshold)
-                backoff = 1.0
-
-                state.last_scan_count = len(last_scan_results)
-                state.total_advertisements += len(last_scan_results)
-                state.filtered_advertisements += len(last_scan_results) - injected
-                state.last_scan_duration = float(active_timeout)
-                state.last_scan_timestamp = time.time()
-                state.status = "idle"
-                state.notify_callbacks()
-                consecutive_unsupported = 0
-                cached_cycle_pending = False
-
-            except asyncio.CancelledError:
-                _LOGGER.info("Stopping Bluetooth scan worker for %s", speaker.name)
-                raise
-            except Exception:
-                _LOGGER.exception("Unexpected error during cached cycle for %s", speaker.name)
-                cached_cycle_pending = False
-                last_scan_results = None
-                state.status = "unavailable"
-                state.notify_callbacks()
-
-        elif should_scan:
+        if should_scan:
             try:
                 state.status = "waiting_slot"
                 state.notify_callbacks()
@@ -908,8 +867,6 @@ async def _speaker_scan_loop(
                             await api_client.stop_scan(speaker)
                         except Exception as err:
                             _LOGGER.debug("Error stopping scan on %s: %s", speaker.name, err)
-                        cached_cycle_pending = False
-                        last_scan_results = None
                         state.status = "tts_paused"
                         state.notify_callbacks()
                         await asyncio.sleep(1.0)
@@ -931,16 +888,7 @@ async def _speaker_scan_loop(
                 state.notify_callbacks()
                 consecutive_unsupported = 0
 
-                if results and speaker_cache_interpolation:
-                    last_scan_results = results
-                    cached_cycle_pending = True
-                else:
-                    last_scan_results = None
-                    cached_cycle_pending = False
-
             except TokenExpiredError:
-                last_scan_results = None
-                cached_cycle_pending = False
                 _LOGGER.warning("Auth token expired for %s, requesting refresh...", speaker.name)
                 try:
                     await coordinator.async_refresh_token(speaker)
@@ -950,8 +898,6 @@ async def _speaker_scan_loop(
                 await asyncio.sleep(2.0)
                 continue
             except SpeakerUnsupportedError as err:
-                last_scan_results = None
-                cached_cycle_pending = False
                 consecutive_unsupported += 1
                 if (
                     state.total_advertisements > 0
@@ -1007,8 +953,6 @@ async def _speaker_scan_loop(
                     )
                 continue
             except SpeakerConnectionError as err:
-                last_scan_results = None
-                cached_cycle_pending = False
                 _LOGGER.debug(
                     "Connection issue with %s: %s (backing off %0.1fs)",
                     speaker.name,
@@ -1042,8 +986,6 @@ async def _speaker_scan_loop(
                 _LOGGER.info("Stopping Bluetooth scan worker for %s", speaker.name)
                 raise
             except Exception:
-                last_scan_results = None
-                cached_cycle_pending = False
                 _LOGGER.exception("Unexpected error in scan loop for %s", speaker.name)
                 state.status = "unavailable"
                 state.notify_callbacks()

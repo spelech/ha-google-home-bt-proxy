@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13.2"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1376,7 +1376,7 @@ wheels = [
 
 [[package]]
 name = "ha-google-home-bt-proxy"
-version = "1.5.3"
+version = "1.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "bluetooth-data-tools" },

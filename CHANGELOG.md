@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-17
+
+### Changed
+- **Adaptive Bounded Concurrency in Round-Robin Scan Orchestrator (`ScanOrchestrator`)**:
+  - Replaced strict single-slot serialization (`asyncio.Lock(1)`) with a fair FIFO `asyncio.Condition` slot pool that automatically scales concurrent scan slots $K = \max\left(1, \left\lceil \frac{N \times T_{\text{scan}}}{T_{\text{scan}} + T_{\text{interval}}} \right\rceil\right)$ based on the active speaker count $N$ and scan timings (e.g., 1 slot for 1–2 speakers, 2 slots for 3–4 speakers, 3 slots for 5–6 speakers at default 4s/4s timings).
+  - Guarantees every speaker completes a real physical scan within its target cycle ($\le 8.0\text{s}$), keeping advertisements safely inside Bermuda BLE Trilateration's `AREA_MAX_AD_AGE = 10.0s` threshold regardless of fleet size while still minimizing simultaneous 2.4 GHz radio contention.
+  - Added dynamic runtime scaling (`orchestrator.update_scaling(...)`) when speakers are enabled/disabled or scan timings change, plus queue wait compensation (`effective_interval = max(0.5, active_interval - orchestrator_wait)`) and evenly distributed startup stagger delays across the first cycle.
+
+### Removed
+- **Removed Synthetic Cache Interpolation (`CONF_CACHE_INTERPOLATION`)**:
+  - Dropped the `cache_interpolation` option and virtual cache replay cycle now that adaptive round-robin concurrency guarantees sub-10s real hardware scan cycles across multi-speaker fleets.
+
 ## [1.5.3] - 2026-11-14
 
 ### Added
