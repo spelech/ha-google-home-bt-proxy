@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/spelech/ha-google-home-bt-proxy/compare/v1.6.0...v1.7.0) (2026-11-25)
+
+
+### Features
+
+* **switch:** add persistent state/settings and global scanning toggle (v1.7.0) ([#22](https://github.com/spelech/ha-google-home-bt-proxy/issues/22)) ([b0afae3](https://github.com/spelech/ha-google-home-bt-proxy/commit/b0afae3024fcb58e7652f201f887d2c1ed918f50))
+
 ## [1.7.0] - 2026-11-24
 
 ### Added
