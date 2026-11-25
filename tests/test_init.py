@@ -1048,3 +1048,133 @@ async def test_speaker_scan_loop_google_auth_error_triggers_reauth():
     assert state.status == "auth_failed"
     assert mock_speaker.available is False
     mock_entry.async_start_reauth.assert_called_once_with(mock_hass)
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_respects_global_state_and_mid_scan_disable():
+    """Verify scan loop stops mid-scan with 'disabled' status when toggle turns off."""
+    from custom_components.google_home_bt_proxy.models import (
+        GlobalProxyState,
+        SpeakerProxyState,
+    )
+
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_entry.options = {CONF_SCAN_TIMEOUT: 10, CONF_SCAN_INTERVAL: 4}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+
+    mock_speaker = SpeakerNode(
+        device_id="spk-mid-disable",
+        name="Living Room",
+        ip_address="192.168.1.120",
+        auth_token="tok",
+    )
+    mock_scanner = MagicMock()
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    mock_detector.is_tts_active = MagicMock(return_value=False)
+
+    state = SpeakerProxyState(enabled=True)
+    global_state = GlobalProxyState(enabled=True)
+
+    async def _start_scan_and_disable(speaker, timeout=4):  # noqa: ASYNC109
+        # Simulate user toggling global switch off right after scan starts
+        global_state.enabled = False
+        state.abort_scan_event.set()
+        return True
+
+    mock_api.start_scan = AsyncMock(side_effect=_start_scan_and_disable)
+    mock_api.stop_scan = AsyncMock(return_value=True)
+
+    sleep_calls = 0
+    real_sleep = asyncio.sleep
+
+    async def _fake_sleep(duration):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if duration == 10:
+            await real_sleep(0.05)
+            return None
+        if sleep_calls >= 3:
+            raise asyncio.CancelledError()
+        return None
+
+    with patch("asyncio.sleep", side_effect=_fake_sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=state,
+                global_state=global_state,
+            )
+
+    mock_api.stop_scan.assert_awaited_once_with(mock_speaker)
+    assert state.status == "disabled"
+
+
+@pytest.mark.asyncio
+async def test_speaker_scan_loop_orchestrator_scaling_uses_runtime_speakers_and_paused():
+    """Verify orchestrator scaling counts enabled speakers in runtime 'speakers' dict."""
+    from custom_components.google_home_bt_proxy.const import CONF_PAUSED_SPEAKERS
+    from custom_components.google_home_bt_proxy.models import SpeakerProxyState
+    from custom_components.google_home_bt_proxy.orchestrator import ScanOrchestrator
+
+    orchestrator = ScanOrchestrator(speaker_count=1, scan_timeout=4.0, scan_interval=4.0)
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "entry-scale-runtime"
+    mock_entry.options = {CONF_PAUSED_SPEAKERS: ["spk-2", "spk-3"]}
+
+    speakers_runtime = {
+        "spk-0": {"state": SpeakerProxyState(enabled=True)},
+        "spk-1": {"state": SpeakerProxyState(enabled=True)},
+        "spk-2": {"state": SpeakerProxyState(enabled=False)},
+        "spk-3": {"state": SpeakerProxyState(enabled=False)},
+    }
+    mock_hass = MagicMock()
+    mock_hass.data = {DOMAIN: {"entry-scale-runtime": {"speakers": speakers_runtime}}}
+
+    mock_coord = MagicMock()
+    mock_api = MagicMock()
+    mock_api.start_scan = AsyncMock(return_value=True)
+    mock_api.get_scan_results = AsyncMock(return_value=[])
+    mock_speaker = SpeakerNode("spk-0", "Speaker 0", "192.168.1.150", "auth-0")
+    mock_scanner = MagicMock()
+    mock_scanner.process_scan_results = MagicMock(return_value=0)
+    mock_detector = MagicMock()
+    mock_detector.async_is_playing = AsyncMock(return_value=False)
+    mock_detector.is_tts_active = MagicMock(return_value=False)
+
+    iteration = 0
+
+    async def mock_sleep(duration):
+        nonlocal iteration
+        iteration += 1
+        if iteration >= 3:
+            raise asyncio.CancelledError()
+        return None
+
+    with patch("asyncio.sleep", side_effect=mock_sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _speaker_scan_loop(
+                mock_hass,
+                mock_entry,
+                mock_coord,
+                mock_api,
+                mock_speaker,
+                mock_scanner,
+                initial_delay=0.0,
+                playback_detector=mock_detector,
+                state=speakers_runtime["spk-0"]["state"],
+                orchestrator=orchestrator,
+            )
+
+    # 2 active speakers with 4s scan / 4s interval -> concurrency = 1
+    assert orchestrator.max_concurrent == 1

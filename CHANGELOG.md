@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-24
+
+### Added
+- **Global Bluetooth Proxy Scanning Toggle Switch (`GoogleHomeBtProxyGlobalScannerSwitch`)**:
+  - Added a service-device toggle entity (`switch.<entry>_global_bluetooth_proxy_scanning`, unique ID `<entry_id>_global_scanner_switch`) to pause or resume scanning across all Google Home speakers in automations or dashboards without disabling the integration.
+  - Exposes live automation attributes (`total_speakers`, `enabled_speakers`, `paused_speakers`, `effective_active_speakers`) and preserves individually paused speakers when toggling global scanning back on.
+- **Persistent Runtime State & Settings Synchronization (`ProxyStateStore` & `entry.options`)**:
+  - Added `ProxyStateStore` (`persistence.py`) using Home Assistant `Store` to persist global toggle state and per-speaker operational metrics (`total_advertisements`, `filtered_advertisements`, `last_scan_count`, `last_scan_duration`, `last_scan_timestamp`) across integration reloads and restarts.
+  - Added `CONF_PAUSED_SPEAKERS` (`paused_speakers`) and `CONF_GLOBAL_SCANNING_ENABLED` (`global_scanning_enabled`) backed by in-place `entry.options` updates (`update_options_in_place`) so toggling switches in automations persists immediately without triggering full integration reloads.
+- **Options Flow Scanner Toggles**:
+  - Exposed **Enable Global Bluetooth Proxy Scanning** in *Scanning & Bermuda Mode* and **Enable Bluetooth Proxy Scanner for this Speaker** (`scanner_enabled`) in *Speaker-Specific Overrides* (synced with `paused_speakers` independently of custom timing/RF overrides).
+
+### Fixed
+- **Switch Persistence, Mid-Scan Abort & Race Conditions**:
+  - Upgraded `GoogleHomeBtProxyScannerSwitch` with `RestoreEntity`, in-place persistence, immediate `"disabled"` status updates, active scan abort (`abort_scan_event`), and instant wake (`trigger_scan_event`).
+  - Cleared `abort_scan_event` prior to `api_client.start_scan` in `_speaker_scan_loop` so mid-request aborts from switches or TTS alerts are never dropped, and marked user/global aborts as `"disabled"` instead of `"tts_paused"`.
+  - Fixed `ScanOrchestrator` active-speaker scaling in `_speaker_scan_loop` to read live speaker states from `entry_data["speakers"]` and exclude `paused_speakers`.
+  - Normalized legacy `list` values for `tracked_devices` in Options Flow defaults to prevent schema errors.
+
 ## [1.6.0] - 2026-11-17
 
 ### Changed

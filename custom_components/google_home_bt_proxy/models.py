@@ -7,6 +7,7 @@ import hashlib
 import ipaddress
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 
 def is_valid_ipv4(address: str | None) -> bool:
@@ -122,6 +123,58 @@ class SpeakerProxyState:
 
     def notify_callbacks(self) -> None:
         """Notify all registered callbacks of a state change."""
+        for cb in list(self.callbacks):
+            try:
+                cb()
+            except Exception:
+                pass
+
+    def to_persisted_dict(self) -> dict[str, Any]:
+        """Serialize operational state and toggle status for persistent storage."""
+        return {
+            "enabled": self.enabled,
+            "total_advertisements": self.total_advertisements,
+            "filtered_advertisements": self.filtered_advertisements,
+            "last_scan_count": self.last_scan_count,
+            "last_scan_duration": self.last_scan_duration,
+            "last_scan_timestamp": self.last_scan_timestamp,
+        }
+
+    def restore_persisted_dict(self, data: dict[str, Any]) -> None:
+        """Restore non-volatile operational metrics from persisted storage."""
+        if not isinstance(data, dict):
+            return
+        total_ads = data.get("total_advertisements")
+        if isinstance(total_ads, int) and not isinstance(total_ads, bool):
+            self.total_advertisements = max(0, total_ads)
+        filtered_ads = data.get("filtered_advertisements")
+        if isinstance(filtered_ads, int) and not isinstance(filtered_ads, bool):
+            self.filtered_advertisements = max(0, filtered_ads)
+        last_count = data.get("last_scan_count")
+        if isinstance(last_count, int) and not isinstance(last_count, bool):
+            self.last_scan_count = max(0, last_count)
+        last_duration = data.get("last_scan_duration")
+        if isinstance(last_duration, (int, float)) and not isinstance(last_duration, bool):
+            self.last_scan_duration = max(0.0, float(last_duration))
+        last_ts = data.get("last_scan_timestamp")
+        if isinstance(last_ts, (int, float)) and not isinstance(last_ts, bool):
+            self.last_scan_timestamp = float(last_ts)
+
+
+@dataclass
+class GlobalProxyState:
+    """Runtime state for the integration-wide Bluetooth proxy scanning toggle."""
+
+    enabled: bool = True
+    callbacks: list[Callable[[], None]] = field(default_factory=list)
+
+    def register_callback(self, cb: Callable[[], None]) -> Callable[[], None]:
+        """Register a callback for global state changes and return an unregister function."""
+        self.callbacks.append(cb)
+        return lambda: self.callbacks.remove(cb) if cb in self.callbacks else None
+
+    def notify_callbacks(self) -> None:
+        """Notify all registered callbacks of a global state change."""
         for cb in list(self.callbacks):
             try:
                 cb()

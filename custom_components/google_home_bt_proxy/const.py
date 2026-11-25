@@ -24,6 +24,9 @@ CONF_MAX_PLAYING_SKIP_DURATION: Final = "max_playing_skip_duration"
 CONF_RSSI_THRESHOLD: Final = "rssi_threshold"
 CONF_RSSI_OFFSET: Final = "rssi_offset"
 CONF_DISABLED_SPEAKERS: Final = "disabled_speakers"
+CONF_PAUSED_SPEAKERS: Final = "paused_speakers"
+CONF_GLOBAL_SCANNING_ENABLED: Final = "global_scanning_enabled"
+CONF_SCANNER_ENABLED: Final = "scanner_enabled"
 CONF_KNOWN_IRKS: Final = "known_irks"
 CONF_SPEAKER_OVERRIDES: Final = "speaker_overrides"
 CONF_SELECTED_SPEAKER: Final = "selected_speaker"
@@ -85,6 +88,12 @@ DEFAULT_PATH_LOSS_EXPONENT: Final = 2.5
 DEFAULT_ORCHESTRATION_MODE: Final = ORCHESTRATION_ROUND_ROBIN
 DEFAULT_BERMUDA_MODE: Final = False
 DEFAULT_FILTER_PEER_PROXIES: Final = True
+DEFAULT_GLOBAL_SCANNING_ENABLED: Final = True
+DEFAULT_SCANNER_ENABLED: Final = True
+
+# Storage Constants
+STORAGE_VERSION: Final = 1
+STORAGE_KEY_PREFIX: Final = "google_home_bt_proxy_state"
 
 BERMUDA_NOTICE: Final = (
     "Bermuda Optimization Mode is active. Signal smoothing, hardware RSSI offsets, "
