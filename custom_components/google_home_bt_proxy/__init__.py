@@ -32,6 +32,7 @@ from .const import (
     CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
     CONF_FILTER_PEER_PROXIES,
+    CONF_GLOBAL_SCANNING_ENABLED,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_MAX_DISTANCE,
@@ -39,6 +40,7 @@ from .const import (
     CONF_ORCHESTRATION_MODE,
     CONF_PASSWORD,
     CONF_PATH_LOSS_EXPONENT,
+    CONF_PAUSED_SPEAKERS,
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
@@ -57,6 +59,7 @@ from .const import (
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
     DEFAULT_FILTER_PEER_PROXIES,
+    DEFAULT_GLOBAL_SCANNING_ENABLED,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
     DEFAULT_ORCHESTRATION_MODE,
@@ -81,8 +84,9 @@ from .const import (
 from .coordinator import GoogleHomeProxyCoordinator, is_valid_ipv4
 from .filter import SignalProcessor
 from .irk import IrkResolver, parse_irk_config
-from .models import SpeakerNode, SpeakerProxyState, mac_math_offset
+from .models import GlobalProxyState, SpeakerNode, SpeakerProxyState, mac_math_offset
 from .orchestrator import ScanOrchestrator
+from .persistence import ProxyStateStore
 from .playback import SpeakerPlaybackDetector
 from .scanner import GoogleHomeRemoteScanner
 
@@ -133,6 +137,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     disabled_speakers: list[str] = entry.options.get(CONF_DISABLED_SPEAKERS, [])
     active_speakers = [s for s in speakers if s.device_id not in disabled_speakers]
+
+    state_store = ProxyStateStore(hass, entry.entry_id)
+    persisted_runtime = await state_store.async_load()
+    persisted_global = (
+        persisted_runtime.get("global", {}) if isinstance(persisted_runtime, dict) else {}
+    )
+    persisted_speakers = (
+        persisted_runtime.get("speakers", {}) if isinstance(persisted_runtime, dict) else {}
+    )
+    entry_options = getattr(entry, "options", {}) or {}
+    if CONF_GLOBAL_SCANNING_ENABLED in entry_options:
+        global_enabled = bool(entry_options[CONF_GLOBAL_SCANNING_ENABLED])
+    elif isinstance(persisted_global, dict) and isinstance(persisted_global.get("enabled"), bool):
+        global_enabled = persisted_global["enabled"]
+    else:
+        global_enabled = DEFAULT_GLOBAL_SCANNING_ENABLED
+    global_state = GlobalProxyState(enabled=global_enabled)
+
+    paused_explicit = CONF_PAUSED_SPEAKERS in entry_options
+    paused_speakers: set[str] = set(entry_options.get(CONF_PAUSED_SPEAKERS, []))
 
     # Fetch eureka_info for all active speakers to resolve true hardware MAC and model
     for speaker in active_speakers:
@@ -310,13 +334,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if (speaker_bermuda_mode or not signal_processor.enable_rssi_smoothing)
             else "smoothed"
         )
+        persisted_spk = persisted_speakers.get(speaker.device_id, {})
+        if paused_explicit:
+            speaker_enabled = speaker.enabled and (speaker.device_id not in paused_speakers)
+        elif isinstance(persisted_spk, dict) and isinstance(persisted_spk.get("enabled"), bool):
+            speaker_enabled = speaker.enabled and persisted_spk["enabled"]
+        else:
+            speaker_enabled = speaker.enabled
+        initial_status = "idle" if (speaker_enabled and global_state.enabled) else "disabled"
         proxy_state = SpeakerProxyState(
-            enabled=speaker.enabled,
+            status=initial_status,
+            enabled=speaker_enabled,
             bermuda_mode=speaker_bermuda_mode,
             rssi_mode=rssi_mode,
             assigned_area=assigned_area,
             bermuda_area_ready=assigned_area is not None,
         )
+        if isinstance(persisted_spk, dict):
+            proxy_state.restore_persisted_dict(persisted_spk)
         speakers_data[speaker.device_id] = {
             "speaker": speaker,
             "state": proxy_state,
@@ -350,6 +385,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 playback_detector=playback_detector,
                 state=proxy_state,
                 orchestrator=orchestrator,
+                global_state=global_state,
+                state_store=state_store,
             ),
             name=f"google_home_bt_proxy_{speaker.device_id}",
         )
@@ -363,6 +400,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "api_client": api_client,
         "playback_detector": playback_detector,
         "orchestrator": orchestrator,
+        "global_state": global_state,
+        "state_store": state_store,
         "scanners": scanners,
         "speakers": speakers_data,
         "unregister_callbacks": unregister_callbacks,
@@ -558,6 +597,8 @@ async def _speaker_scan_loop(
     playback_detector: SpeakerPlaybackDetector | None = None,
     state: SpeakerProxyState | None = None,
     orchestrator: ScanOrchestrator | None = None,
+    global_state: GlobalProxyState | None = None,
+    state_store: ProxyStateStore | None = None,
 ) -> None:
     """Continuous staggered polling scan loop for an individual speaker."""
     if playback_detector is None:
@@ -574,9 +615,11 @@ async def _speaker_scan_loop(
     consecutive_unsupported = 0
     continuous_skip_start: float | None = None
     while True:
-        if not state.enabled:
-            state.status = "disabled"
-            state.notify_callbacks()
+        is_global_enabled = global_state.enabled if global_state is not None else True
+        if not state.enabled or not is_global_enabled:
+            if state.status != "disabled":
+                state.status = "disabled"
+                state.notify_callbacks()
             await asyncio.sleep(1.0)
             continue
 
@@ -706,6 +749,7 @@ async def _speaker_scan_loop(
         orchestrator.mode = entry.options.get(CONF_ORCHESTRATION_MODE, DEFAULT_ORCHESTRATION_MODE)
         if hasattr(orchestrator, "update_scaling"):
             disabled_ids = set(entry.options.get(CONF_DISABLED_SPEAKERS, []))
+            paused_ids = set(entry.options.get(CONF_PAUSED_SPEAKERS, []))
             active_count = 0
             domain_data = getattr(hass, "data", {})
             entry_runtime = (
@@ -716,17 +760,32 @@ async def _speaker_scan_loop(
             runtime_states = (
                 entry_runtime.get("speaker_states") if isinstance(entry_runtime, dict) else None
             )
+            runtime_speakers = (
+                entry_runtime.get("speakers") if isinstance(entry_runtime, dict) else None
+            )
             if isinstance(runtime_states, dict) and runtime_states:
                 active_count = sum(
                     1
                     for spk_id, st in runtime_states.items()
-                    if spk_id not in disabled_ids and getattr(st, "enabled", True)
+                    if spk_id not in disabled_ids
+                    and spk_id not in paused_ids
+                    and getattr(st, "enabled", True)
+                )
+            elif isinstance(runtime_speakers, dict) and runtime_speakers:
+                active_count = sum(
+                    1
+                    for spk_id, spk_data in runtime_speakers.items()
+                    if spk_id not in disabled_ids
+                    and spk_id not in paused_ids
+                    and getattr(spk_data.get("state"), "enabled", True)
                 )
             elif isinstance(getattr(coordinator, "speakers", None), dict):
                 active_count = sum(
                     1
                     for spk_id, spk in coordinator.speakers.items()
-                    if spk_id not in disabled_ids and getattr(spk, "enabled", True)
+                    if spk_id not in disabled_ids
+                    and spk_id not in paused_ids
+                    and getattr(spk, "enabled", True)
                 )
             if active_count > 0:
                 orchestrator.update_scaling(
@@ -836,11 +895,14 @@ async def _speaker_scan_loop(
                     state.status = "scanning"
                     state.notify_callbacks()
 
+                    # Clear stale abort signal before starting the hardware scan so an
+                    # abort triggered mid-request (e.g. switch toggle or TTS) is honored.
+                    state.abort_scan_event.clear()
+
                     # 1. Trigger hardware scan
                     await api_client.start_scan(speaker, timeout=active_timeout)
 
                     # 2. Await hardware scan duration with abort support
-                    state.abort_scan_event.clear()
                     aborted = False
                     if state.abort_scan_event.is_set():
                         aborted = True
@@ -859,15 +921,25 @@ async def _speaker_scan_loop(
                             await sleep_task
 
                     if aborted:
-                        _LOGGER.info(
-                            "Active Bluetooth scan on %s aborted due to incoming TTS/audio alert",
-                            speaker.name,
+                        is_disabled = not state.enabled or (
+                            global_state is not None and not global_state.enabled
                         )
+                        if is_disabled:
+                            _LOGGER.info(
+                                "Active Bluetooth scan on %s aborted because scanner was disabled",
+                                speaker.name,
+                            )
+                        else:
+                            _LOGGER.info(
+                                "Active Bluetooth scan on %s aborted due to "
+                                "incoming TTS/audio alert",
+                                speaker.name,
+                            )
                         try:
                             await api_client.stop_scan(speaker)
                         except Exception as err:
                             _LOGGER.debug("Error stopping scan on %s: %s", speaker.name, err)
-                        state.status = "tts_paused"
+                        state.status = "disabled" if is_disabled else "tts_paused"
                         state.notify_callbacks()
                         await asyncio.sleep(1.0)
                         continue
@@ -887,6 +959,18 @@ async def _speaker_scan_loop(
                 state.status = "idle"
                 state.notify_callbacks()
                 consecutive_unsupported = 0
+                if state_store is not None and global_state is not None:
+                    domain_data = getattr(hass, "data", {})
+                    entry_runtime = (
+                        domain_data.get(DOMAIN, {}).get(getattr(entry, "entry_id", ""), {})
+                        if isinstance(domain_data, dict)
+                        else {}
+                    )
+                    runtime_speakers = (
+                        entry_runtime.get("speakers") if isinstance(entry_runtime, dict) else None
+                    )
+                    if isinstance(runtime_speakers, dict):
+                        state_store.schedule_save(global_state, runtime_speakers)
 
             except TokenExpiredError:
                 _LOGGER.warning("Auth token expired for %s, requesting refresh...", speaker.name)
@@ -1000,7 +1084,15 @@ async def _speaker_scan_loop(
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
+    """Reload config entry unless only in-place runtime toggle options changed."""
+    domain_data = getattr(hass, "data", {}).get(DOMAIN, {})
+    entry_data = domain_data.get(entry.entry_id) if isinstance(domain_data, dict) else None
+    if isinstance(entry_data, dict):
+        in_place_options = entry_data.get("_in_place_options")
+        current_options = dict(getattr(entry, "options", {}) or {})
+        if in_place_options is not None and current_options == in_place_options:
+            return
+        entry_data.pop("_in_place_options", None)
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
 
@@ -1010,6 +1102,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry_data: dict[str, Any] | None = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not entry_data:
         return True
+
+    state_store = entry_data.get("state_store")
+    global_state = entry_data.get("global_state")
+    speakers_data = entry_data.get("speakers")
+    if (
+        isinstance(state_store, ProxyStateStore)
+        and isinstance(global_state, GlobalProxyState)
+        and isinstance(speakers_data, dict)
+    ):
+        await state_store.async_save_now(global_state, speakers_data)
 
     unload_platforms = getattr(
         getattr(hass, "config_entries", None), "async_unload_platforms", None

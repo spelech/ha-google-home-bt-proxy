@@ -1032,3 +1032,95 @@ async def test_config_flow_reconfigure_success_and_invalid_auth():
     assert entry.data[CONF_MASTER_TOKEN] == "aas_et/rotated_token"
     assert entry.data[CONF_ANDROID_ID] == "aid-reconfig"
     assert entry.options[CONF_KNOWN_IRKS] == "11223344556677889900aabbccddeeff Watch"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_global_and_per_speaker_scanner_toggles():
+    """Verify global and per-speaker scanning toggles persist independently in options flow."""
+    from custom_components.google_home_bt_proxy.const import (
+        CONF_CUSTOM_SETTINGS,
+        CONF_GLOBAL_SCANNING_ENABLED,
+        CONF_PAUSED_SPEAKERS,
+        CONF_SCAN_INTERVAL,
+        CONF_SCANNER_ENABLED,
+        CONF_SELECTED_SPEAKER,
+        CONF_SPEAKER_OVERRIDES,
+        CONF_TRACKED_DEVICES,
+    )
+    from custom_components.google_home_bt_proxy.models import SpeakerNode
+
+    speaker = SpeakerNode(
+        device_id="spk-near-esp32",
+        name="Bedroom Mini",
+        ip_address="192.168.1.40",
+        auth_token="tok",
+        hardware="Google Nest Mini",
+    )
+    mock_coord = MagicMock()
+    mock_coord.speakers = {"spk-near-esp32": speaker}
+
+    mock_entry = MagicMock()
+    mock_entry.entry_id = "entry-toggles"
+    mock_entry.options = {CONF_TRACKED_DEVICES: ["AA:BB:CC", "Watch"]}
+
+    mock_hass = MagicMock()
+    mock_hass.data = {DOMAIN: {"entry-toggles": {"coordinator": mock_coord}}}
+
+    handler = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler.hass = mock_hass
+
+    # 1. Global scanning toggle in scanning step
+    scan_form = await handler.async_step_scanning(None)
+    scan_keys = [k.schema for k in scan_form["data_schema"].schema.keys()]
+    assert CONF_GLOBAL_SCANNING_ENABLED in scan_keys
+
+    scan_res = await handler.async_step_scanning({CONF_GLOBAL_SCANNING_ENABLED: False})
+    assert scan_res["data"][CONF_GLOBAL_SCANNING_ENABLED] is False
+
+    # 2. Filtering handles legacy list tracked_devices cleanly
+    filter_form = await handler.async_step_filtering(None)
+    assert filter_form["type"] == "form"
+
+    # 3. Speaker settings pauses speaker independently of custom overrides
+    mock_entry.options = scan_res["data"]
+    handler2 = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler2.hass = mock_hass
+    await handler2.async_step_speaker_overrides({CONF_SELECTED_SPEAKER: "spk-near-esp32"})
+
+    spk_res = await handler2.async_step_speaker_settings(
+        {
+            CONF_SCANNER_ENABLED: False,
+            CONF_CUSTOM_SETTINGS: True,
+            CONF_SCAN_INTERVAL: 20,
+        }
+    )
+    assert "spk-near-esp32" in spk_res["data"][CONF_PAUSED_SPEAKERS]
+    assert CONF_SCANNER_ENABLED not in spk_res["data"][CONF_SPEAKER_OVERRIDES]["spk-near-esp32"]
+
+    # 4. Unchecking custom_settings removes timing overrides but preserves paused_speakers!
+    mock_entry.options = spk_res["data"]
+    handler3 = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler3.hass = mock_hass
+    handler3._selected_speaker = "spk-near-esp32"
+
+    spk_res2 = await handler3.async_step_speaker_settings(
+        {
+            CONF_CUSTOM_SETTINGS: False,
+        }
+    )
+    assert "spk-near-esp32" not in spk_res2["data"][CONF_SPEAKER_OVERRIDES]
+    assert "spk-near-esp32" in spk_res2["data"][CONF_PAUSED_SPEAKERS]
+
+    # 5. Re-enabling scanner_enabled removes speaker from paused_speakers
+    mock_entry.options = spk_res2["data"]
+    handler4 = GoogleHomeBtProxyOptionsFlowHandler(mock_entry)
+    handler4.hass = mock_hass
+    handler4._selected_speaker = "spk-near-esp32"
+
+    spk_res3 = await handler4.async_step_speaker_settings(
+        {
+            CONF_SCANNER_ENABLED: True,
+            CONF_CUSTOM_SETTINGS: False,
+        }
+    )
+    assert "spk-near-esp32" not in spk_res3["data"][CONF_PAUSED_SPEAKERS]

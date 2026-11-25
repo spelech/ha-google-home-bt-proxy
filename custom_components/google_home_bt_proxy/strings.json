@@ -86,6 +86,7 @@
         "title": "Scanning & Bermuda Mode",
         "description": "Configure Bluetooth inquiry scanning cadence, multi-speaker orchestration, and Bermuda optimization mode.",
         "data": {
+          "global_scanning_enabled": "Enable Global Bluetooth Proxy Scanning",
           "bermuda_mode": "Bermuda BLE Optimization Mode",
           "filter_peer_proxies": "Filter Peer Google Home Speakers",
           "orchestration_mode": "Multi-Speaker Orchestration Mode",
@@ -93,6 +94,7 @@
           "scan_interval": "Idle Scan Interval (seconds)"
         },
         "data_description": {
+          "global_scanning_enabled": "Master toggle to enable or pause Bluetooth proxy scanning across all speakers without disabling the integration.",
           "bermuda_mode": "Optimizes Bluetooth packets for Bermuda: forwards raw instantaneous RSSI (bypasses proxy smoothing) and sets 0 dBm offset so Bermuda handles asymmetric smoothing and scanner calibration natively.",
           "filter_peer_proxies": "Automatically suppress advertisements from other Google Home speakers in your home to avoid crosstalk and ghost devices.",
           "orchestration_mode": "round_robin coordinates and staggers scans across speakers with adaptive slot concurrency to prevent 2.4GHz Wi-Fi congestion while keeping cycle times within Bermuda's 10s window; independent runs each speaker uncoordinated.",
@@ -170,6 +172,7 @@
         "title": "Speaker Overrides: {speaker}",
         "description": "Configure custom scanning and timing overrides for this specific speaker. Uncheck 'Enable Custom Settings' to inherit global defaults.",
         "data": {
+          "scanner_enabled": "Enable Bluetooth Proxy Scanner for this Speaker",
           "custom_settings": "Enable Custom Settings for this Speaker",
           "bermuda_mode": "Bermuda BLE Optimization Mode",
           "filter_peer_proxies": "Filter Peer Google Home Speakers",
@@ -192,6 +195,7 @@
           "path_loss_exponent": "Path Loss Absorption Exponent"
         },
         "data_description": {
+          "scanner_enabled": "Enable or pause Bluetooth scanning on this specific speaker without removing its entities or disabling the integration. Also synced with this speaker's switch entity.",
           "custom_settings": "Check to override global settings with the custom values configured below for this speaker.",
           "bermuda_mode": "Enable Bermuda optimization mode for this speaker (forwards raw RSSI, sets 0 dBm offset).",
           "filter_peer_proxies": "Suppress advertisements from peer Google Home speakers for this speaker.",

@@ -25,6 +25,7 @@ from .const import (
     CONF_ENABLE_RSSI_SMOOTHING,
     CONF_FILTER_MODE,
     CONF_FILTER_PEER_PROXIES,
+    CONF_GLOBAL_SCANNING_ENABLED,
     CONF_KNOWN_IRKS,
     CONF_MASTER_TOKEN,
     CONF_MAX_DISTANCE,
@@ -33,6 +34,7 @@ from .const import (
     CONF_ORCHESTRATION_MODE,
     CONF_PASSWORD,
     CONF_PATH_LOSS_EXPONENT,
+    CONF_PAUSED_SPEAKERS,
     CONF_PLAYBACK_MODE,
     CONF_PLAYING_SCAN_INTERVAL,
     CONF_PLAYING_SCAN_TIMEOUT,
@@ -43,6 +45,7 @@ from .const import (
     CONF_RSSI_THRESHOLD,
     CONF_SCAN_INTERVAL,
     CONF_SCAN_TIMEOUT,
+    CONF_SCANNER_ENABLED,
     CONF_SELECTED_SPEAKER,
     CONF_SPEAKER_OVERRIDES,
     CONF_TRACKED_DEVICES,
@@ -52,6 +55,7 @@ from .const import (
     DEFAULT_ENABLE_RSSI_SMOOTHING,
     DEFAULT_FILTER_MODE,
     DEFAULT_FILTER_PEER_PROXIES,
+    DEFAULT_GLOBAL_SCANNING_ENABLED,
     DEFAULT_MAX_DISTANCE,
     DEFAULT_MAX_PLAYING_SKIP_DURATION,
     DEFAULT_ORCHESTRATION_MODE,
@@ -392,6 +396,9 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
         for spk_id in self.config_entry.options.get(CONF_SPEAKER_OVERRIDES, {}):
             if spk_id not in choices:
                 choices[spk_id] = spk_id
+        for spk_id in self.config_entry.options.get(CONF_PAUSED_SPEAKERS, []):
+            if spk_id not in choices:
+                choices[spk_id] = spk_id
         return choices
 
     def _get_default_bermuda(self) -> bool:
@@ -443,6 +450,12 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
         default_bermuda = options.get(CONF_BERMUDA_MODE, self._get_default_bermuda())
         schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_GLOBAL_SCANNING_ENABLED,
+                    default=options.get(
+                        CONF_GLOBAL_SCANNING_ENABLED, DEFAULT_GLOBAL_SCANNING_ENABLED
+                    ),
+                ): bool,
                 vol.Optional(
                     CONF_BERMUDA_MODE,
                     default=default_bermuda,
@@ -574,6 +587,9 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=new_options)
 
         options = self.config_entry.options
+        tracked_default = options.get(CONF_TRACKED_DEVICES, "")
+        if isinstance(tracked_default, list):
+            tracked_default = ", ".join(str(x) for x in tracked_default if x)
         schema = vol.Schema(
             {
                 vol.Optional(
@@ -582,7 +598,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                 ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
                 vol.Optional(
                     CONF_TRACKED_DEVICES,
-                    default=options.get(CONF_TRACKED_DEVICES, ""),
+                    default=tracked_default,
                 ): str,
                 vol.Optional(
                     CONF_RSSI_THRESHOLD,
@@ -632,18 +648,31 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_speaker_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage overrides for a specific speaker."""
+        """Manage overrides and scanner enablement for a specific speaker."""
         options = self.config_entry.options
         existing_overrides: dict[str, Any] = options.get(CONF_SPEAKER_OVERRIDES, {}).get(
             self._selected_speaker, {}
         )
+        paused_speakers = list(options.get(CONF_PAUSED_SPEAKERS, []))
+        is_scanner_enabled = self._selected_speaker not in paused_speakers
 
         if user_input is not None:
             new_options = dict(options)
             all_overrides = dict(new_options.get(CONF_SPEAKER_OVERRIDES, {}))
 
+            scanner_enabled = bool(user_input.get(CONF_SCANNER_ENABLED, is_scanner_enabled))
+            if scanner_enabled:
+                paused_speakers = [sid for sid in paused_speakers if sid != self._selected_speaker]
+            elif self._selected_speaker not in paused_speakers:
+                paused_speakers.append(self._selected_speaker)
+            new_options[CONF_PAUSED_SPEAKERS] = paused_speakers
+
             if user_input.get(CONF_CUSTOM_SETTINGS, True):
-                override_data = {k: v for k, v in user_input.items() if k != CONF_CUSTOM_SETTINGS}
+                override_data = {
+                    k: v
+                    for k, v in user_input.items()
+                    if k not in (CONF_CUSTOM_SETTINGS, CONF_SCANNER_ENABLED)
+                }
                 all_overrides[self._selected_speaker] = override_data
             else:
                 all_overrides.pop(self._selected_speaker, None)
@@ -653,8 +682,18 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
 
         has_custom = bool(existing_overrides)
         default_bermuda = options.get(CONF_BERMUDA_MODE, self._get_default_bermuda())
+        tracked_default = existing_overrides.get(
+            CONF_TRACKED_DEVICES,
+            options.get(CONF_TRACKED_DEVICES, ""),
+        )
+        if isinstance(tracked_default, list):
+            tracked_default = ", ".join(str(x) for x in tracked_default if x)
         speaker_schema = vol.Schema(
             {
+                vol.Optional(
+                    CONF_SCANNER_ENABLED,
+                    default=is_scanner_enabled,
+                ): bool,
                 vol.Optional(
                     CONF_CUSTOM_SETTINGS,
                     default=has_custom,
@@ -740,10 +779,7 @@ class GoogleHomeBtProxyOptionsFlowHandler(config_entries.OptionsFlow):
                 ): vol.In([FILTER_MODE_ALL, FILTER_MODE_KNOWN_ONLY, FILTER_MODE_WHITELIST]),
                 vol.Optional(
                     CONF_TRACKED_DEVICES,
-                    default=existing_overrides.get(
-                        CONF_TRACKED_DEVICES,
-                        options.get(CONF_TRACKED_DEVICES, ""),
-                    ),
+                    default=tracked_default,
                 ): str,
                 vol.Optional(
                     CONF_ENABLE_RSSI_SMOOTHING,
